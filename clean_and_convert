@@ -1,0 +1,30 @@
+#!/bin/bash
+
+path=$1  # /mnt/data/Simulation/STRUCTURAL_ANALYSIS/
+
+for env in CDL2 POPG; do
+  cd $env
+  for round in $(find . -maxdepth 1 -mindepth 1 -type d); do
+    cd $round
+    for mol in $(find . -maxdepth 1 -mindepth 1 -type d -printf "%f\n"); do
+      cd $mol
+      for state1 in $(find . -maxdepth 1 -mindepth 1 -type d); do
+        cd $state1
+        # ls
+        if [ ! -f prod-"$mol".tpr ]; then
+          # sed -i -e s'/nstlog                   = 2000/nstlog                   = 5000/g' prod-$mol.mdp
+          # sed -i -e s'/nstenergy                = 2000/nstenergy                = 5000/g' prod-$mol.mdp
+          # sed -i -e s'/nstxout-compressed       = 2000/nstxout-compressed       = 5000/g' prod-$mol.mdp
+          # cp ../../../min.mdp ../../../equ.mdp .
+          cp ../../../prod.mdp ./prod-"$mol".mdp
+          gmx grompp -f prod-"$mol".mdp -c prod-"$mol".gro -p system.top -n index.ndx -maxwarn 3 -o prod-"$mol" -po conversion.mdp
+          rm *.cpt *.edr *.pdb \#* test*
+        fi
+        cd ../
+      done
+      cd ../
+    done
+    cd ../
+  done
+  cd ../
+done
