@@ -1,12 +1,9 @@
 # general python modules
-import sys
-
 import numpy as np
 import pandas as pd
 import regex as re
 # SLATM tools, analysis
 import qml
-import matplotlib.pyplot as plt
 
 
 def get_atom_features(itp, col):
@@ -17,26 +14,6 @@ def get_atom_features(itp, col):
         itp (str): path to .itp file.
         col (str): name of one of the columns to detect where to start aggregating data.
         """
-    # start_agg = False
-    # line_li = []
-    # with open(itp, mode='r') as f:
-    #     for line in f.read().splitlines():
-
-    #         if start_agg:
-    #             # stop if empty row is encountered
-    #             if len(line) < 10:
-    #                 break
-    #             line_li.append(line[:-1].split('\t'))
-    #
-    #         # get index of relevant value from column name and start aggregation
-    #         if col in line:
-    #             columns = line.split('\t')
-    #             start_agg = True
-
-    # columns = columns[:len(line_li[0])]
-    # print(columns)
-    # return pd.DataFrame(line_li, columns=columns)
-
     rgx = re.compile(r'(?<=\[atoms\]\n).*(?=\[bonds\])', re.DOTALL | re.MULTILINE)
     molecule = itp.stem
     round_ = itp.parts[-4]
@@ -154,9 +131,6 @@ class GenerateRepresentation:
             type_at = self.mapping_dict.get(name, "?")
             charges.append(self.charges_dict.get(type_at, "?"))
 
-        # if "?" in charges:
-        #     print(sub_sel, '\n')
-
         return charges
 
     def get_interaction_means(self, slatms, compounds, round_, molecule):
@@ -185,6 +159,7 @@ class GenerateRepresentation:
 
         return rep_frames, means
 
+
     def get_near_com(self, sel):
         """
         Get bead closest to CoM from CL environment from first frame.
@@ -196,36 +171,3 @@ class GenerateRepresentation:
         mol = sel[0][0].select_atoms("resname MOL")
         closest = mol[np.argmin(np.linalg.norm(sel[2][0][:mol.ids[-1]] - sel[1][0], axis=1))]
         return closest.index  # , closest.name
-
-    # def vis_frames(self, cl, popg, closest, mol):
-    #     """
-    #     Shows vector on log scale for each frame with matplotlib.
-    #     Also calculates means across all frames (very dumb, I know).
-    #     To just get the means without visualizations,
-    #     switch `visuals` to false in class initialization.
-    #     """
-    #     means = []
-    #     for label, data in [("POPG", popg), ("CL", cl)]:
-    #         vec = [data[i][closest] for i in range(len(data))]
-    #         mean = np.mean(np.array(vec), axis=0)
-    #         means.append(mean)
-    #         if self.visuals:
-    #             plt.plot(mean, label=f"{label} MEAN")
-
-    #     if self.visuals:
-    #         plt.yscale('log')
-    #         plt.legend()
-    #         plt.title("Means")
-    #         plt.show()
-
-    #         selectivity = selec[f"molecule_{mol}"]
-    #         for ind in range(len(cl)):
-    #             plt.plot(cl[ind][closest], label="CL")
-    #            plt.plot(popg[ind][closest], label="POPG")
-    #             plt.yscale('log')
-    #             plt.legend()
-    #             plt.title(f"Frame {ind} molecule_{mol} Selectivity: {selectivity}")
-    #             #             plt.savefig(f'Frame{ind}.png')
-    #             plt.show()
-
-    #     return means

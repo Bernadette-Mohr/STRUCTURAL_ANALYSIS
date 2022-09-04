@@ -43,18 +43,19 @@ def find_isomorphisms(unique_graphs, graphs):
 def process_graphs(dirpath):
 
     unique_graphs = list()
-    for rnd_graphs in sorted(dirpath.glob('**/**/*.pkl')):  # ROUND_*/graphs/*.pkl
-        with open(rnd_graphs, 'rb') as graphs_pkl:
-            print(rnd_graphs)
-            graphs = pickle.load(graphs_pkl)
-            if not unique_graphs:
-                unique_graphs.append((clean_graph(graphs[0]), 1))
-            unique_graphs = find_isomorphisms(unique_graphs, graphs)
+    # for rnd_graphs in sorted(dirpath.glob('**/**/*.pkl')):  # ROUND_*/graphs/*.pkl
+    rnd_graphs = dirpath / 'graphs_with_FE-results.pkl'
+    with open(rnd_graphs, 'rb') as graphs_pkl:
+        print(rnd_graphs)
+        graphs = pickle.load(graphs_pkl)
+        if not unique_graphs:
+            unique_graphs.append((clean_graph(graphs[0]), 1))
+        unique_graphs = find_isomorphisms(unique_graphs, graphs)
 
     print('# unique structures:', len(unique_graphs))
-    # save_path = dirpath / 'unique_graphs_freq.pkl'
-    # with open(save_path, 'wb') as uniques_pkl:
-    #     pickle.dump(unique_graphs, uniques_pkl)
+    save_path = dirpath / 'unique_graphs_FE-results_freq.pkl'
+    with open(save_path, 'wb') as uniques_pkl:
+        pickle.dump(unique_graphs, uniques_pkl)
 
 
 if __name__ == '__main__':

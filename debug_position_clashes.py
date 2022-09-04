@@ -1,16 +1,9 @@
 # general python modules
-import pickle as pl
 from pathlib import Path
-from os.path import isfile
-from itertools import chain
-from collections import defaultdict, Counter
+from collections import defaultdict
 import numpy as np
-import pandas as pd
 # MD tools, analysis
-import qml
 import MDAnalysis
-import gromacs as gmx
-from gromacs import tools
 import plotly.express as px
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -18,8 +11,6 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 
 print(MDAnalysis.__version__)
-print(gmx.release())
-print(gmx.__version__)
 
 
 def get_masses_from_file(itp):
@@ -158,7 +149,6 @@ def preprocess(cdl2_results, popg_results):
                        sorted(pg_round_mols.glob('*-molecule_*-*'))[-1]]
         for lipid in state1_dirs:
             print(lipid)
-            trjconv = tools.Trjconv()
             pre = PreprocessPipeline(str(list(lipid.glob('prod-*.gro'))[0]), str(list(lipid.glob('prod-*.xtc'))[0]),
                                      str(list(lipid.glob('molecule_*.itp'))[0]))
             processed.append(pre.preprocess_sim_data())
