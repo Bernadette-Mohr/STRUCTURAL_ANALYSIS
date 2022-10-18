@@ -20,15 +20,12 @@ class PreprocessPipeline:
 
         sel = universe.select_atoms('(resname MOL or around 11 resname MOL) and '
                                     'not (name WP or name WM or name NAP or name NAM)', updating=True)
-        mol = universe.select_atoms('resname MOL', updating=True)
+        # mol = universe.select_atoms('resname MOL', updating=True)
 
-        # list of particle positions per frame
-        sel_positions, mol_positions = list(), list()
-        # list of atom selections per frame
-        sel_atoms, mol_atoms = list(), list()
+        # list of particles, list of particle positions per frame
+        sel_positions, sel_atoms = list(), list()
         for timestep in universe.trajectory:
             sel_atoms.append(sel.atoms)
-            mol_atoms.append(mol.atoms)
             sel_positions.append(sel.positions)
-            mol_positions.append(mol.positions)
-        return sel_atoms, mol_atoms, sel_positions, mol_positions
+
+        return sel_atoms, sel_positions

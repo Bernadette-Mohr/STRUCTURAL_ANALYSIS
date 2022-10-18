@@ -81,18 +81,21 @@ def make_mbtypes(compounds):
                     'Q0': 'Q0',
                     'T2': 'T2',
                     'T5': 'T5'}
-    # mapping_popg = {'GL0P': 'P4', 'PO4': 'Qa', 'GL1': 'Na', 'GL2': 'Na', 'C1A': 'C1', 'D2A': 'C3', 'C3A': 'C1',
-    #                 'C4A': 'C1', 'C1B': 'C1', 'C2B': 'C1', 'C3B': 'C1', 'C4B': 'C1'}
-    PG_beads = ['GL0P', 'PO4', 'GL1', 'GL2', 'C1A', 'D2A', 'C3A', 'C4A', 'C1B', 'C2B', 'C3B', 'C4B']
-    CL_beads = ['GL0C', 'PO41', 'GL11', 'GL21', 'C1A1', 'C2A1', 'D3A1', 'C4A1', 'C5A1', 'C1B1', 'C2B1', 'D3B1', 'C4B1',
-                'C5B1', 'PO42', 'GL21', 'GL22', 'C1A2', 'C2A2', 'D3A2', 'C4A2', 'C5A2', 'C1B2', 'C2B2', 'D3B2', 'C4B2',
-                'C5B2']
-    NA_beads = ['NAC']
-    W_beads = ['W']
+    PG_beads = {'round': 'ALL', 'molecule': 'POPG', 'types': ['GL0P', 'PO4', 'GL1', 'GL2', 'C1A', 'D2A',
+                                                              'C3A', 'C4A', 'C1B', 'C2B', 'C3B', 'C4B']}
+    CL_beads = {'round': 'ALL', 'molecule': 'CDL2', 'types': ['GL0C', 'PO41', 'GL11', 'GL21', 'C1A1', 'C2A1',
+                                                              'D3A1', 'C4A1', 'C5A1', 'C1B1', 'C2B1', 'D3B1',
+                                                              'C4B1', 'C5B1', 'PO42', 'GL21', 'GL22', 'C1A2',
+                                                              'C2A2', 'D3A2', 'C4A2', 'C5A2', 'C1B2', 'C2B2',
+                                                              'D3B2', 'C4B2', 'C5B2']}
+    NA_beads = {'round': 'ALL', 'molecule': 'SODIUM', 'types': ['NAC']}
+    W_beads = {'round': 'ALL', 'molecule': 'WATER', 'types': ['W']}
+    rows = [PG_beads, CL_beads, NA_beads, W_beads]
+    new_df = pd.DataFrame.from_dict(rows, orient='columns')
     # Generating "charges" for each type (they function as unique identifiers)
     charges_list = set(mapping_dict.values())
     charges_dict = {k: i for i, k in enumerate(charges_list, start=1)}
-    compounds += [PG_beads, CL_beads, NA_beads, W_beads]
+    compounds = pd.concat([compounds, new_df], ignore_index=True)
     # Generating many-body types
     charges_per_compound = [[charges_dict[mapping_dict[bead]] for bead in compound] for compound in
                             compounds['types'].tolist()]
@@ -102,6 +105,19 @@ def make_mbtypes(compounds):
     return results, compounds
 
 
+def pad_bead_number(means):
+
+    N = 5
+    pad_value = np.zeros(means[0].size)
+    pad_size = N - len(means)
+
+    if len(means) < N:
+        return [np.nan_to_num(avg, copy=True, nan=0.0, posinf=None, neginf=None)
+                for avg in [*means, *[pad_value] * pad_size]]
+    else:
+        return [np.nan_to_num(avg, copy=True, nan=0.0, posinf=None, neginf=None) for avg in means]
+
+
 class GenerateRepresentation:
 
     def __init__(self, mapping_dict, charges_dict, mbtypes, visuals=False):
@@ -109,10 +125,6 @@ class GenerateRepresentation:
         self.charges_dict = charges_dict
         self.mbtypes = mbtypes
         self.visuals = visuals
-
-    def __del__(self):
-        class_name = self.__class__.__name__
-        print(f'{class_name} deleted')
 
     def get_charges(self, sel):
         """
@@ -131,43 +143,35 @@ class GenerateRepresentation:
             type_at = self.mapping_dict.get(name, "?")
             charges.append(self.charges_dict.get(type_at, "?"))
 
+        # if "?" in charges:
+        #     print(sub_sel, '\n')
+
         return charges
 
-    def get_interaction_means(self, slatms, compounds, round_, molecule):
-        pass
-
-    def make_representation(self, atoms, positions, beads) -> object:
+    def make_representation(self, atoms, positions) -> list:
         """
         For each frame, generates slatm representation.
-        :dtype: object
+        :rtype: list
         """
         rep_frames = []
-        solute = atoms[0].select_atoms('resname MOL')
         for idx, (at_frame, pos_frame) in enumerate(zip(atoms, positions)):
             charges_arr = self.get_charges(at_frame)
+            # rep_frame = qml.representations.generate_slatm(pos_frame, charges_arr, self.mbtypes,
+            #                                                local=True, sigmas=[0.3, .2], dgrids=[.2, .2], rcut=8.,
+            #                                                rpower=6)
             rep_frame = qml.representations.generate_slatm(pos_frame, charges_arr, self.mbtypes,
-                                                           local=True, sigmas=[0.3, .2], dgrids=[.2, .2], rcut=8.,
+                                                           local=True, sigmas=[.3, .2], dgrids=[.1, .1], rcut=8.,
                                                            rpower=6)
 
             rep_frames.append(rep_frame)
 
+        solute = atoms[0].select_atoms('resname MOL')
         means = []
         for bead in solute:
             vec = [rep_frames[i][bead.index] for i in range(len(rep_frames))]
             mean = np.mean(np.array(vec), axis=0)
             means.append(mean)
 
-        return rep_frames, means
+        means = pad_bead_number(means)
 
-
-    def get_near_com(self, sel):
-        """
-        Get bead closest to CoM from CL environment from first frame.
-        Used to choose relevant bead for visualization.
-
-        sel[2][0]: Updated positions of first frame of sim
-        mol.ids[-1]: Cutoff for last index of ids
-        """
-        mol = sel[0][0].select_atoms("resname MOL")
-        closest = mol[np.argmin(np.linalg.norm(sel[2][0][:mol.ids[-1]] - sel[1][0], axis=1))]
-        return closest.index  # , closest.name
+        return means

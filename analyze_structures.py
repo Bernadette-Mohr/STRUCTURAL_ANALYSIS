@@ -55,12 +55,12 @@ def get_test_dir(run_dir):
     return test_dir
 
 
-def chunks(l, n):
+def chunks(list_, n):
     """Yield n number of sequential chunks from l."""
-    d, r = divmod(len(l), n)
+    d, r = divmod(len(list_), n)
     for i in range(n):
         si = (d+1)*(i if i < r else r) + d*(0 if i < r else i - r)
-        yield l[si:si+(d+1 if i < r else d)]
+        yield list_[si:si+(d+1 if i < r else d)]
 
 
 def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtypes=None, compounds=None, slatms=None):
@@ -108,9 +108,11 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
 
     if not slatms:
         print('Generating SLATM representations...')
-        for lipid_path in [cdl2_results, popg_results]:  # tqdm([cdl2_results, popg_results], position=0, desc='Lipid', leave=False, ncols=80):
+        # tqdm([cdl2_results, popg_results], position=0, desc='Lipid', leave=False, ncols=80):
+        for lipid_path in [cdl2_results, popg_results]:
             lipid = lipid_path.parts[-1]
-            for rnd_path in sorted(lipid_path.glob('ROUND_*')):  # tqdm(sorted(lipid_path.glob('ROUND_*')), position=1, desc='Round', leave=False, ncols=80):
+            # tqdm(sorted(lipid_path.glob('ROUND_*')), position=1, desc='Round', leave=False, ncols=80):
+            for rnd_path in sorted(lipid_path.glob('ROUND_*')):
                 round_ = rnd_path.parts[-1]
                 if batch_file:
                     df = pd.read_pickle(batch_file)
@@ -118,8 +120,9 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                                df.loc[(df['batches'] == f'batch_{batch}') & (df['rounds'] == round_)]['molecules'].tolist()]
                 else:
                     solutes = sorted(rnd_path.glob('molecule_*'))
-                for chunk_idx, chunk in enumerate(chunks(solutes, len(solutes))):  # tqdm(enumerate(chunks(sorted(rnd_path.glob('molecule_*')), 6)), position=2,
-                                             #  desc='Molecule Chunks', leave=False, ncols=80):
+                # tqdm(enumerate(chunks(sorted(rnd_path.glob('molecule_*')), 6)), position=2, desc='Molecule Chunks',
+                # leave=False, ncols=80):
+                for chunk_idx, chunk in enumerate(chunks(solutes, len(solutes))):
                     slatms_df = pd.DataFrame(columns=['solutes', 'SLATMS', 'means'])
                     for mol in chunk:
                         molecule = mol.parts[-1]
@@ -153,11 +156,9 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                                               'types'].item()
 
                         slatms, means = rep.make_representation(sel_atoms, sel_positions, beads)
-                        print(len(slatms))
-                        print(len(means))
                         df_idx = len(slatms_df.index)
                         slatms_df.loc[df_idx, ['solutes', 'SLATMS', 'means']] = [molecule, slatms, means]
-                        print(slatms_df)
+
                         del rep, pre
                         gc.collect()
 
@@ -168,9 +169,6 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                     gc.collect()
                     sys.exit()
         sys.exit()
-    else:
-        # TODO: however this issue is going to get solved!
-        slatm_df = pd.read_pickle(slatms)
 
     for cl_round_mols, pg_round_mols in zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False),
                                             sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)):
