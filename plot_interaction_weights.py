@@ -139,7 +139,6 @@ class GraphBuilder:
             node_colors = nx.get_node_attributes(graph, 'color')
             bead_colormap = {labels[bead]: color for bead, color in node_colors.items()}
             edge_weights = nx.get_edge_attributes(graph, 'weight')
-            print(edge_weights)
             edge_colors = ['orange' if edge_weights[edge] > 0.0 else 'gray' for edge in edge_weights]
             sorted_by_role = sorted(graph.nodes(data=True), key=lambda node_data: node_data[1]['kind'])
             grouped = groupby(sorted_by_role, key=lambda node_data: node_data[1]['kind'])
@@ -163,19 +162,19 @@ class GraphBuilder:
              sub_colormap,
              sub_sizes,
              shape) = get_subgraph_attributes(subgraphs['lipid'], positions, node_sizes, bead_colormap)
-            nx.draw_networkx_nodes(subgraphs['lipid'], sub_positions, node_color=sub_colormap, node_size=sub_sizes,
+            nx.draw_networkx_nodes(subgraphs['lipid'], sub_positions, node_color=sub_colormap, node_size=1000,
                                    edgecolors='k', node_shape=shape, ax=ax)
             (sub_positions,
              sub_colormap,
              sub_sizes,
              shape) = get_subgraph_attributes(subgraphs['solute'], positions, node_sizes, bead_colormap)
-            nx.draw_networkx_nodes(subgraphs['solute'], positions, node_color=sub_colormap, node_size=sub_sizes,
+            nx.draw_networkx_nodes(subgraphs['solute'], positions, node_color=sub_colormap, node_size=1000,
                                    edgecolors='k', node_shape=shape, ax=ax)
             (sub_positions,
              sub_colormap,
              sub_sizes,
              shape) = get_subgraph_attributes(subgraphs['solvent'], positions, node_sizes, bead_colormap)
-            nx.draw_networkx_nodes(subgraphs['solvent'], positions, node_color=sub_colormap, node_size=sub_sizes,
+            nx.draw_networkx_nodes(subgraphs['solvent'], positions, node_color=sub_colormap, node_size=1000,
                                    edgecolors='k', node_shape=shape, alpha=1.0, ax=ax)
             nx.draw_networkx_labels(graph, positions, labels, font_size=14, font_weight='bold', ax=ax)
             nx.draw_networkx_edges(graph, positions, node_size=node_sizes, width=edge_widths, edge_color=edge_colors,
@@ -183,7 +182,7 @@ class GraphBuilder:
             sns.despine(left=True, bottom=True)
             plt.tight_layout(pad=0.0)
             path = directory / filename
-            # fig.savefig(path)
+            fig.savefig(path)
             plt.show()
 
         else:
