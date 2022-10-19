@@ -80,7 +80,8 @@ def load_files(dir_path, results_file, graphs_path):
     # graphs = get_graphs(results_file, graphs_path)
     # with open('graphs_with_FE-results.pkl', 'wb') as handle:
     #     pickle.dump(graphs, handle)
-    with open('graphs_with_FE-results.pkl', 'rb') as handle:
+    graphs = graphs_path / 'graphs_with_FE-results.pkl'
+    with open(graphs, 'rb') as handle:
         graphs = pickle.load(handle)
     nodes_dict = {0: 'bead1', 1: 'bead2', 2: 'bead3', 3: 'bead4', 4: 'bead5'}
     state_df = analyze_graphs(graphs, nodes_dict=nodes_dict)
