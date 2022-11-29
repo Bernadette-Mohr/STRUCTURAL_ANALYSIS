@@ -45,7 +45,7 @@ def get_property_fractions(types):
 def process_data(dir_path, bead_df, pc_df, filename):
     df = pd.read_pickle(pc_df)
     df[['round', 'solute']] = df.sol.str.split(expand=True)
-    df.drop(['size', 'sol'], axis=1, inplace=True)
+    df.drop(['sol'], axis=1, inplace=True)
     df.rename(columns={0: 'PC1', 1: 'PC2', 2: 'PC3', 3: 'PC4', 4: 'PC5', 'dist': 'distance', 'selec': 'selectivity'},
               inplace=True)
     df = df[['round', 'solute', 'PC1', 'PC2', 'PC3', 'PC4', 'PC5', 'distance', 'selectivity']]
