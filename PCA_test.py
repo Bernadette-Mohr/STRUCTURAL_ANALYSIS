@@ -72,8 +72,8 @@ def get_non_empty(beads_list):
     return existing_beads
 
 
-def get_difference(cl_vec, pg_vec):
-    return np.subtract(cl_vec, pg_vec)
+# def get_difference(cl_vec, pg_vec):
+#     return np.subtract(cl_vec, pg_vec)
 
 
 def calculate_avg(bead1, bead2, bead3, bead4, bead5):
@@ -101,13 +101,13 @@ def get_bead_averages(df):
 """
 
 
-def get_lognorm_distance(cl_vec, pg_vec):
-    alpha = np.divide(1, np.power(10, np.divide(99, 10)))
-    cl = log_addition(cl_vec, alpha)
-    pg = log_addition(pg_vec, alpha)
-    distances = get_difference(cl, pg)
+# def get_lognorm_distance(cl_vec, pg_vec):
+#     alpha = np.divide(1, np.power(10, np.divide(99, 10)))
+#     cl = log_addition(cl_vec, alpha)
+#     pg = log_addition(pg_vec, alpha)
+#     distances = get_difference(cl, pg)
 
-    return distances
+#     return distances
 
 
 def calculate_weights(df):

@@ -100,7 +100,7 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                                                                             vmax=np.round(max_, 1)))
 
     fig = plt.figure(constrained_layout=True, figsize=(15, 10), dpi=150)
-    gs = mpl.gridspec.GridSpec(nrows=3, ncols=4, figure=fig, left=0.02, bottom=0.02, right=0.98, top=None, wspace=None,
+    gs = mpl.gridspec.GridSpec(nrows=3, ncols=4, figure=fig, left=0.06, bottom=0.02, right=0.68, top=None, wspace=None,
                                hspace=None, width_ratios=None, height_ratios=None)
     pc_comb = itertools.combinations(scores.columns[0:5].tolist(), 2)
     for idx, (x, y) in enumerate(pc_comb):
@@ -152,14 +152,16 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
             #          pg_n_body, color='b', weight='bold', ha='center', va='center')
         ax.set_aspect('equal', 'box')
     if kmeans:
-        # plt.axis('off')
-        plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
+        handles, labels = ax.get_legend_handles_labels()
+        ax1 = fig.add_subplot(gs[2, 2])
+        plt.axis('off')
+        ax1.legend(handles, labels, loc="upper left", bbox_to_anchor=(-0.15, 1))
     else:
         ax = fig.add_subplot(gs[2, 2])
         plt.axis('off')
         plt.colorbar(sm, location='right', orientation='vertical', pad=-0.99, ax=ax)
-    # plt.savefig(dir_path / f'biplot_{interaction}_{descriptor}.pdf')
-    plt.show()
+    plt.savefig(dir_path / f'biplot_{interaction}_{descriptor}.pdf')
+    # plt.show()
 
 
 def load_data(directory, scores, coefficients, labels, interaction, descriptor, kmeans=False):
@@ -180,8 +182,9 @@ def load_data(directory, scores, coefficients, labels, interaction, descriptor, 
     # Add KMeans clustering labels to scores df
     if kmeans:
         scores = kmeans_cluster(scores, 5, 6)
+        scores.to_pickle(f'{directory}/wghtd_avg_PCA_kmeans.pickle')
     # plot_biplot(scores[scores.columns[0:3]], coeffs, directory, filename)
-    plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, directory, kmeans)
+    # plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, directory, kmeans)
 
 
 if __name__ == '__main__':

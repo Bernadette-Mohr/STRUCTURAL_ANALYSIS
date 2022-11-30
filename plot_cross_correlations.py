@@ -35,7 +35,7 @@ def plot_cross_correlation(df, label, dir_path):
         axes[idx].set_ylabel(f'{label}')
     fig.delaxes(axes[-1])
     plt.tight_layout()
-    plt.savefig(dir_path / f'pc_cross-correlation_{label}.pdf')
+    plt.savefig(dir_path / f'cross-correlation_wghtd-avg_{label}.pdf')
     # plt.show()
 
 
