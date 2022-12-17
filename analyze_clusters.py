@@ -1,9 +1,11 @@
 import argparse
+import sys
 from pathlib import Path
 import numpy as np
 import pandas as pd
 import pickle as pkl
 import networkx as nx
+from isomorphism_find_unique import find_isomorphisms
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 import seaborn as sns
@@ -47,7 +49,7 @@ def analyze_graphs(graphs):
     clusters = pd.DataFrame(columns=['clusters', 'positions', 'bead-types', 'percentage'])
     for cluster in graphs.keys():
         # print(cluster)
-        n = np.divide(100, len(graphs[cluster]))
+        # print('n graphs', len(graphs[cluster]))
         node_stats = {0: [], 1: [], 2: [], 3: [], 4: []}
         for graph in graphs[cluster]:
             beads = nx.get_node_attributes(graph, 'name')
@@ -69,8 +71,12 @@ def analyze_graphs(graphs):
                 positions.sort(key=lambda x: x[1], reverse=True)
                 node_stats[idx1] = positions
 
+        # n = sum([sum(node[1] for node in nodes) for nodes in node_stats.values()])
+
         for idx, nodes in node_stats.items():
             len_idx = len(clusters.index)
+            n = 100 / sum(node[1] for node in nodes)
+            # print('n', n)
             nodes = [(key, (value * n)) for key, value in nodes]
             for idx_n, node in enumerate(nodes):
                 clusters.loc[len_idx + idx_n, ['clusters', 'positions', 'bead-types', 'percentage']] = cluster, idx, \
@@ -78,15 +84,11 @@ def analyze_graphs(graphs):
     return clusters
 
 
-def process_data(dir_path, cluster_file, graph_files):
-    df = pd.read_pickle(dir_path / cluster_file)
-    graph_files = sorted(Path(dir_path / graph_files).glob('ROUND_*'))
-    graphs = get_clusters(df, graph_files)
-    clusters = analyze_graphs(graphs)
+def plot_bead_freq_by_clusters(dir_path, bead_clusters):
     fig = plt.figure(constrained_layout=True, figsize=(16, 9), dpi=150)
     gs = mpl.gridspec.GridSpec(nrows=2, ncols=3, figure=fig, left=0.06, bottom=0.02, right=0.68, top=None, wspace=None,
                                hspace=None, width_ratios=None, height_ratios=None)
-    groups = clusters.groupby(by='clusters')
+    groups = bead_clusters.groupby(by='clusters')
     bead_colors = {'T1': 'r', 'T2': 'b', 'T3': 'g', 'T4': 'c', 'T5': 'm', 'Q0+': 'y', 'Q0-': 'lightgray'}
     for idx, group in enumerate(groups):
         if idx <= 2:
@@ -96,10 +98,7 @@ def process_data(dir_path, cluster_file, graph_files):
             x_idx = 1
             y_idx = idx - 3
         group[1].drop('clusters', axis=1, inplace=True)
-        # group[1].set_index('positions', inplace=True)
-        # print(group[1])
         ax = fig.add_subplot(gs[x_idx, y_idx])
-        # group[1].plot(kind='bar', stacked=True, color=bead_colors, ax=ax)
         sns.barplot(data=group[1], x='positions', y='percentage', hue='bead-types', dodge=True, palette=bead_colors,
                     ax=ax)
         ax.set_xticklabels(['bead 1', 'bead 2', 'bead 3', 'bead 4', 'bead 5'])
@@ -109,6 +108,74 @@ def process_data(dir_path, cluster_file, graph_files):
 
     fig.savefig(f'{dir_path}/bead_types_per_cluster.pdf')
     # plt.show()
+
+
+def draw_graph(G, i, grey_colormap, ax=None, frequency=None):
+    labels = nx.get_node_attributes(G, 'name')
+    # idx_names = {k: f'{str(k)}: {v}' for k, v in labels.items()}
+    idx_names = {k: f'{str(k + 1)}' for k, v in labels.items()}
+    # print(idx_names)
+    color_map = np.vectorize(grey_colormap.get)(list(labels.values()))
+    G.remove_edges_from(nx.selfloop_edges(G))
+    if ax is not None:
+        nx.draw(G, labels=idx_names, node_color=color_map, edgecolors='k',
+                width=3, node_size=2000, font_size=18, ax=ax)
+        ax.margins(.25, .25)
+        ax.autoscale(enable=True, axis='both', tight=None)
+        if frequency is not None:
+            ax.set_title(f'Count: {frequency}', fontsize=24)
+        else:
+            ax.set_title(f'molecule_{str(i).zfill(2)}')
+    else:
+        nx.draw(G, labels=idx_names, node_color=color_map, edgecolors='k',
+                width=2, node_size=2000)
+
+
+def draw_graphs(dir_path, cluster, graphs, n_rows=6, n_cols=5):
+    grey_colormap = {'T1': '0.7', 'T2': '0.7', 'T3': '0.7', 'T4': '0.7', 'T5': '0.7', 'Q0+': '0.7', 'Q0-': '0.7'}
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(25, 25), dpi=150)
+    # print(type(axes))
+    ax = axes.flatten()
+    for i, graph in enumerate(graphs):
+        if isinstance(graph, tuple):
+            G = graph[0]
+            freq = graph[1]
+            draw_graph(G, i, grey_colormap, ax[i], frequency=freq)
+        else:
+            draw_graph(graph, i, ax[i])
+    for idx in ax[len(graphs):]:
+        fig.delaxes(idx)
+
+    plt.suptitle(f'Cluster {cluster.split("_")[1]}', fontsize=36, y=1.)
+    plt.tight_layout()
+    # plt.show()
+    plt.savefig(f'{dir_path}/isomorphs_{cluster}.pdf')
+
+
+def get_structure_freq_by_cluster(dir_path, graphs):
+    iso_freq = dict()
+    for cluster in graphs.keys():
+        unique_graphs = list()
+        unique_graphs = find_isomorphisms(unique_graphs, graphs[cluster])
+        unique_graphs.sort(key=lambda x: x[1], reverse=True)
+        n_uniques = len(unique_graphs)
+        if n_uniques > 20:
+            n_rows, n_cols = 5, 5
+        else:
+            n_rows, n_cols = 4, 5
+        draw_graphs(dir_path, cluster, unique_graphs, n_rows, n_cols)
+        iso_freq[cluster] = unique_graphs
+    print(iso_freq)
+
+
+def process_data(dir_path, cluster_file, graph_files):
+    df = pd.read_pickle(dir_path / cluster_file)
+    graph_files = sorted(Path(dir_path / graph_files).glob('ROUND_*'))
+    graphs = get_clusters(df, graph_files)
+    bead_clusters = analyze_graphs(graphs)
+    print(bead_clusters)
+    plot_bead_freq_by_clusters(dir_path, bead_clusters)
+    # get_structure_freq_by_cluster(dir_path, graphs)
 
 
 if __name__ == '__main__':

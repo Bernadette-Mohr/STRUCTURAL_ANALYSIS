@@ -291,22 +291,39 @@ def plot_scree_plot(evr, n_components):
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9))
     x = np.arange(n_components) + 1
     ax.bar(x, evr * 100, alpha=0.7)
-    ax.plot(x, evr * 100, marker='o', linewidth=2, color='k')
-
-    ax.set_ylabel('Variance explained [%]')
-    ax.set_xlabel('Components')
+    # ax.autoscale(True)
+    # ax.margins(x=0.05, y=1)
+    sum_evr = np.array([])
+    for idx, e in enumerate(evr):
+        if idx > 0:
+            sum_evr = np.append(sum_evr, sum(evr[:idx+1]))
+        else:
+            sum_evr = np.append(sum_evr, e)
+    ax1 = ax.twinx()
+    # ax1.margins(x=0.05, y=1)
+    ax1.plot(x, sum_evr * 100, marker='o', linewidth=2, color='k')
+    ax.set_ylim([0.0, 35.0])
+    ax1.set_ylim([20.0, 90.0])
+    ax.set_ylabel('Variance explained [%]', fontsize=18)
+    ax1.set_ylabel(r'$\sum$ Variance explained [%]', fontsize=18, rotation=-90, labelpad=30)
+    ax.set_xlabel('Components', fontsize=18)
     ax.set_xticks(x)
+    ax1.set_xticks(x)
+    ax1.grid(False)
     plt.tight_layout()
     path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
     plt.savefig(f'{path}/explained_variance_ratio_avg_log_diff.pdf')
-    plt.show()
+    # plt.show()
 
 
-def plot_data_distribution(df, filename):
+def plot_data_distribution(df, title, filename, width):
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9), dpi=150)
     hist, bin_edges = np.histogram(df, bins='auto')
-    ax.bar(x=bin_edges[:-1], height=hist, log=True, width=1)
+    ax.bar(x=bin_edges[:-1], height=hist, log=True, width=width)
     # plt.ylim([0, 1])
+    ax.set_ylabel('Frequency', fontsize=18)
+    ax.set_xlabel('SLATM vectors', fontsize=18)
+    plt.title(title, fontsize=20)
     plt.tight_layout()
     path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
     plt.savefig(f'{path}/{filename}')
@@ -345,14 +362,16 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
     sm.set_array([])
     fig = plt.figure(constrained_layout=True, figsize=(16, 3*(len(selection[group]))), dpi=150)
     gs = mpl.gridspec.GridSpec(nrows=len(selection[group]), ncols=2, figure=fig, left=0.02, bottom=0.02, right=0.98,
-                               top=None, wspace=None, hspace=None, width_ratios=[2, 6], height_ratios=None)
+                               top=None, wspace=None, hspace=None, width_ratios=[3, 13], height_ratios=None)
     pcs = {f'PC{str(idx + 1)}': idx for idx in range(len(loadings.columns))}
     cutoff = 1.0
     n_two_body = len([idx for idx in loadings.index if len(idx.split('-')) == 2])
     two_body = loadings.iloc[0:n_two_body, [pcs[pc], loadings.columns.get_loc('hydrophobicity')]]
     two_body = two_body.loc[two_body[pc].abs().nlargest(len(two_body.index)).index]
-    if len(selection[group]) > 4:
-        two_body = two_body[(two_body[pc] > cutoff) | (two_body[pc] < -cutoff)]
+    # print(len(selection[group]))
+    # if len(selection[group]) > 4:
+    #     two_body = two_body[(two_body[pc] > cutoff) | (two_body[pc] < -cutoff)]
+    two_body = two_body[(two_body[pc] > cutoff) | (two_body[pc] < -cutoff)]
     heads_dict = dict()
     for bead in selection[group]:
         heads_dict[bead] = [idx for idx in two_body.index if bead in idx]
@@ -362,7 +381,12 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
         ax = fig.add_subplot(gs[idx, 0])
         ax.bar(sel.index, sel[pc], color=color_list)
         ax.tick_params(axis='x', rotation=45)
-        ax.set_ylabel(f'Loadings, headgrp. bead: {selection[group][idx]}')
+        if selection[group][idx] == 'Nda':
+            lipid = 'CL'
+        else:
+            lipid = 'PG'
+        # ax.set_ylabel(f'Loadings, headgrp. bead: {selection[group][idx]}')
+        ax.set_ylabel(f'{lipid}', fontsize=18)
 
     three_body = loadings.iloc[n_two_body:, [pcs[pc], loadings.columns.get_loc('hydrophobicity')]]
     three_body = three_body.loc[three_body[pc].abs().nlargest(len(three_body.index)).index]
@@ -382,8 +406,9 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
         ax = fig.add_subplot(gs[idx, 1])
         ax.bar(sel.index, sel[pc], color=color_list)
         cbar = plt.colorbar(sm, pad=0.01)
-        cbar.set_label(r'$\Delta G_{W\rightarrow Ol}$', rotation=270, labelpad=10)
+        cbar.set_label(r'$\Delta G_{W\rightarrow Ol}$', rotation=270, labelpad=20, fontsize=16)
         ax.tick_params(axis='x', rotation=45)
+        ax.margins(x=0.01)
     fig.suptitle(f'{pc}', size=20)
     plt.savefig(f'{path}/{group_name}_{pc}_loading-plot_cutoff-{cutoff}.pdf')
     # plt.show()
@@ -402,148 +427,148 @@ def check_if_present(first, second, idx_list):
     return True
 
 
-def get_largest_correlations(weight_corr):
-    path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
-    weight_corr = weight_corr.T
-    weight_corr = weight_corr.corr()
-    corr_stack = weight_corr.stack()
-    corr_stack = corr_stack[corr_stack.index.get_level_values(0) != corr_stack.index.get_level_values(1)]
-    sim_idx = list()
-    for first, second in corr_stack.index.tolist():
-        _first = first.split('-')
-        _second = second.split('-')
-        if len(_first) < len(_second):
-            for element in _first:
-                if element in _second:
-                    _second.remove(element)
-                else:
-                    break
-                if len(_second) < len(_first):
-                    if (first, second) not in sim_idx and (second, first) not in sim_idx:
-                        sim_idx.append((first, second))
-        elif len(_first) > len(_second):
-            for element in _second:
-                if element in _first:
-                    _first.remove(element)
-                else:
-                    break
-                if len(_first) < len(_second):
-                    if (first, second) not in sim_idx and (second, first) not in sim_idx:
-                        sim_idx.append((first, second))
-    ident_idx = list()
-    for first, second in corr_stack.index.tolist():
-        _first = first.split('-')
-        _second = second.split('-')
-        if len(_first) == len(_second):
-            if sorted(_first) == sorted(_second):
-                if (first, second) not in ident_idx and (second, first) not in ident_idx:
-                    ident_idx.append((first, second))
-    similar = corr_stack.loc[sim_idx]
-    similar = similar.loc[similar.abs().nlargest(len(similar.index)).index]
-    sim1, sim2 = map(list, zip(*similar.abs().nlargest(20).index.tolist()))
-    similar = weight_corr.loc[sim1, sim2]
-    # sim_fig = plt.figure(figsize=(9, 8), dpi=150)
-    min_ = min(similar.min())
-    max_ = max(similar.max())
-    if min_ < 0:
-        center = 0.0
-    else:
-        center = ((max_ - min_) / 2) + min_
-    # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-    # sim_ax = sns.heatmap(similar, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
-    # plt.yticks(rotation=0)
-    # plt.xticks(rotation=45)
-    # plt.tight_layout()
-    # plt.savefig(f'{path}/correlation_two-body_three_body.pdf')
-    identical = corr_stack.loc[ident_idx]
-    identical = corr_stack.loc[identical.abs().nlargest(len(identical.index)).index]
-    ident1, ident2 = map(list, zip(*identical.abs().nlargest(20).index.tolist()))
-    identical = weight_corr.loc[ident1, ident2]
-    # ident_fig = plt.figure(figsize=(9, 8), dpi=150)
-    # min_ = min(identical.min())
-    # max_ = max(identical.max())
-    # if min_ < 0:
-    #     center = 0.0
-    # else:
-    #     center = ((max_ - min_) / 2) + min_
-    # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-    # ident_ax = sns.heatmap(identical, annot=True, square=True, fmt=".1f",
-    #                        cmap='bwr', norm=divnorm)
-    # plt.tight_layout()
-    # plt.savefig(f'{path}/correlation_three-body_three_body.pdf')
-    sim_idx.extend(ident_idx)
-    try:
-        different = pd.read_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
-    except FileNotFoundError:
-        all_pairs = corr_stack.index.tolist()
-        print(len(all_pairs))
-        keep_idx = list()
-        for idx in tqdm(all_pairs):
-            first = sorted(idx[0].split('-'))
-            second = sorted(idx[1].split('-'))
-            if idx not in sim_idx and (idx[1], idx[0]) not in sim_idx:
-                keep_idx.append(idx)
-            else:
-                try:
-                    all_pairs.remove(idx)
-                    all_pairs.remove((idx[1], idx[0]))
-                except ValueError:
-                    pass
-            last_elem = sim_idx[-1]
-            for old_idx in sim_idx:
-                old_first = sorted(old_idx[0].split('-'))
-                old_second = sorted(old_idx[1].split('-'))
-                if first == old_first and second == old_second:
-                    try:
-                        all_pairs.remove(idx)
-                        all_pairs.remove((idx[1], idx[0]))
-                    except ValueError:
-                        pass
-                elif first == old_second and second == old_first:
-                    try:
-                        all_pairs.remove(idx)
-                        all_pairs.remove((idx[1], idx[0]))
-                    except ValueError:
-                        pass
-                    continue
-                else:
-                    if old_idx == last_elem:
-                        keep_idx.append(idx)
-                        try:
-                            all_pairs.remove(idx)
-                            all_pairs.remove((idx[1], idx[0]))
-                        except ValueError:
-                            pass
-        print(len(all_pairs))
-        print(keep_idx)
-        for first, second in tqdm(all_pairs):
-            check_new = check_if_present(first, second, keep_idx)
-            if check_new:
-                keep_idx.append((first, second))
-        print(keep_idx)
-        different = corr_stack.loc[keep_idx]
-        different = different.loc[different.abs().nlargest(len(keep_idx)).index]
-        diff1, diff2 = map(list, zip(*different.abs().nlargest(len(keep_idx)).index.tolist()))
-        save_ = weight_corr.loc[diff1, diff2]
-        save_.to_pickle(f'{path}/different_interactions_correlation_matrix_all.pickle')
-        del save_
-        diff1, diff2 = map(list, zip(*different.abs().nlargest(20).index.tolist()))
-        different = weight_corr.loc[diff1, diff2]
-        # different.to_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
-    # diff_fig = plt.figure(figsize=(9, 8), dpi=150)
-    # min_ = min(different.min())
-    # max_ = max(different.max())
-    # if min_ < 0:
-    #     center = 0.0
-    # else:
-    #     center = ((max_ - min_) / 2) + min_
-    # print(min_, center, max_)
-    # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-    # diff_ax = sns.heatmap(different, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
-    # plt.yticks(rotation=0)
-    # plt.xticks(rotation=45)
-    # plt.tight_layout()
-    # plt.savefig(f'{path}/correlation_differences.pdf')
+# def get_largest_correlations(weight_corr):
+#     path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
+#     weight_corr = weight_corr.T
+#     weight_corr = weight_corr.corr()
+#     corr_stack = weight_corr.stack()
+#     corr_stack = corr_stack[corr_stack.index.get_level_values(0) != corr_stack.index.get_level_values(1)]
+#     sim_idx = list()
+#     for first, second in corr_stack.index.tolist():
+#         _first = first.split('-')
+#         _second = second.split('-')
+#         if len(_first) < len(_second):
+#             for element in _first:
+#                 if element in _second:
+#                     _second.remove(element)
+#                 else:
+#                     break
+#                 if len(_second) < len(_first):
+#                     if (first, second) not in sim_idx and (second, first) not in sim_idx:
+#                         sim_idx.append((first, second))
+#         elif len(_first) > len(_second):
+#             for element in _second:
+#                 if element in _first:
+#                     _first.remove(element)
+#                 else:
+#                     break
+#                 if len(_first) < len(_second):
+#                     if (first, second) not in sim_idx and (second, first) not in sim_idx:
+#                         sim_idx.append((first, second))
+#     ident_idx = list()
+#     for first, second in corr_stack.index.tolist():
+#         _first = first.split('-')
+#         _second = second.split('-')
+#         if len(_first) == len(_second):
+#             if sorted(_first) == sorted(_second):
+#                 if (first, second) not in ident_idx and (second, first) not in ident_idx:
+#                     ident_idx.append((first, second))
+#     similar = corr_stack.loc[sim_idx]
+#     similar = similar.loc[similar.abs().nlargest(len(similar.index)).index]
+#     sim1, sim2 = map(list, zip(*similar.abs().nlargest(20).index.tolist()))
+#     similar = weight_corr.loc[sim1, sim2]
+#     # sim_fig = plt.figure(figsize=(9, 8), dpi=150)
+#     min_ = min(similar.min())
+#     max_ = max(similar.max())
+#     if min_ < 0:
+#         center = 0.0
+#     else:
+#         center = ((max_ - min_) / 2) + min_
+#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
+#     # sim_ax = sns.heatmap(similar, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
+#     # plt.yticks(rotation=0)
+#     # plt.xticks(rotation=45)
+#     # plt.tight_layout()
+#     # plt.savefig(f'{path}/correlation_two-body_three_body.pdf')
+#     identical = corr_stack.loc[ident_idx]
+#     identical = corr_stack.loc[identical.abs().nlargest(len(identical.index)).index]
+#     ident1, ident2 = map(list, zip(*identical.abs().nlargest(20).index.tolist()))
+#     identical = weight_corr.loc[ident1, ident2]
+#     # ident_fig = plt.figure(figsize=(9, 8), dpi=150)
+#     # min_ = min(identical.min())
+#     # max_ = max(identical.max())
+#     # if min_ < 0:
+#     #     center = 0.0
+#     # else:
+#     #     center = ((max_ - min_) / 2) + min_
+#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
+#     # ident_ax = sns.heatmap(identical, annot=True, square=True, fmt=".1f",
+#     #                        cmap='bwr', norm=divnorm)
+#     # plt.tight_layout()
+#     # plt.savefig(f'{path}/correlation_three-body_three_body.pdf')
+#     sim_idx.extend(ident_idx)
+#     try:
+#         different = pd.read_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
+#     except FileNotFoundError:
+#         all_pairs = corr_stack.index.tolist()
+#         print(len(all_pairs))
+#         keep_idx = list()
+#         for idx in tqdm(all_pairs):
+#             first = sorted(idx[0].split('-'))
+#             second = sorted(idx[1].split('-'))
+#             if idx not in sim_idx and (idx[1], idx[0]) not in sim_idx:
+#                 keep_idx.append(idx)
+#             else:
+#                 try:
+#                     all_pairs.remove(idx)
+#                     all_pairs.remove((idx[1], idx[0]))
+#                 except ValueError:
+#                     pass
+#             last_elem = sim_idx[-1]
+#             for old_idx in sim_idx:
+#                 old_first = sorted(old_idx[0].split('-'))
+#                 old_second = sorted(old_idx[1].split('-'))
+#                 if first == old_first and second == old_second:
+#                     try:
+#                         all_pairs.remove(idx)
+#                         all_pairs.remove((idx[1], idx[0]))
+#                     except ValueError:
+#                         pass
+#                 elif first == old_second and second == old_first:
+#                     try:
+#                         all_pairs.remove(idx)
+#                         all_pairs.remove((idx[1], idx[0]))
+#                     except ValueError:
+#                         pass
+#                     continue
+#                 else:
+#                     if old_idx == last_elem:
+#                         keep_idx.append(idx)
+#                         try:
+#                             all_pairs.remove(idx)
+#                             all_pairs.remove((idx[1], idx[0]))
+#                         except ValueError:
+#                             pass
+#         print(len(all_pairs))
+#         print(keep_idx)
+#         for first, second in tqdm(all_pairs):
+#             check_new = check_if_present(first, second, keep_idx)
+#             if check_new:
+#                 keep_idx.append((first, second))
+#         print(keep_idx)
+#         different = corr_stack.loc[keep_idx]
+#         different = different.loc[different.abs().nlargest(len(keep_idx)).index]
+#         diff1, diff2 = map(list, zip(*different.abs().nlargest(len(keep_idx)).index.tolist()))
+#         save_ = weight_corr.loc[diff1, diff2]
+#         save_.to_pickle(f'{path}/different_interactions_correlation_matrix_all.pickle')
+#         del save_
+#         diff1, diff2 = map(list, zip(*different.abs().nlargest(20).index.tolist()))
+#         different = weight_corr.loc[diff1, diff2]
+#         # different.to_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
+#     # diff_fig = plt.figure(figsize=(9, 8), dpi=150)
+#     # min_ = min(different.min())
+#     # max_ = max(different.max())
+#     # if min_ < 0:
+#     #     center = 0.0
+#     # else:
+#     #     center = ((max_ - min_) / 2) + min_
+#     # print(min_, center, max_)
+#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
+#     # diff_ax = sns.heatmap(different, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
+#     # plt.yticks(rotation=0)
+#     # plt.xticks(rotation=45)
+#     # plt.tight_layout()
+#     # plt.savefig(f'{path}/correlation_differences.pdf')
 
 
 def main():
@@ -561,26 +586,29 @@ def main():
                'C5': -2.350, 'C4': -2.902, 'C3': -3.478, 'C2': -3.829, 'C1': -4.134,
                'T1': 2.052, 'T2': 1.906, 'T3': 0.098, 'T3a': 0.098, 'T3d': 0.098, 'T4': -2.455, 'T5': -3.129
                }
+    # avg_path = ''
     avg_path = Path('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/weighted_avg_log_norm_difference_SLATMs.pickle')
     try:
         avg_slatms = pd.read_pickle(avg_path)
     except FileNotFoundError:
         cl_df, pg_df = get_bead_averages(df)
-        cl_df = calculate_weighted_averages(np.vstack(cl_df.cl_avg.values),
-                                            interactions[:-1], interactions_short)
-        # plot_data_distribution(wa_cl, filename='cl_raw_distribution_avg.pdf')
-        pg_df = calculate_weighted_averages(np.vstack(pg_df.pg_avg.values),
-                                            interactions[:-1], interactions_short)
-        # plot_data_distribution(wa_pg, filename='pg_raw_distribution_avg.pdf')
-        cl_df = cl_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
-        # plot_data_distribution(wa_cl, filename='cl_avg_before_log.pdf')
-        pg_df = pg_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
-        # plot_data_distribution(wa_pg, filename='pg_avg_before_log.pdf')
-        avg_slatms = cl_df.subtract(pg_df)
-        plot_data_distribution(avg_slatms, filename='difference_avg_before_log.pdf')
-        avg_slatms.to_pickle(str(avg_path))
 
-    n_components = 5
+        cl_df = calculate_weighted_averages(np.vstack(cl_df.cl_avg.values), interactions[:-1], interactions_short)
+        plot_data_distribution(cl_df, 'CL averaged', filename='cl_raw_distribution_avg.pdf', width=50000)
+
+        pg_df = calculate_weighted_averages(np.vstack(pg_df.pg_avg.values), interactions[:-1], interactions_short)
+        plot_data_distribution(pg_df, 'PG averaged', filename='pg_raw_distribution_avg.pdf', width=50000)
+
+        cl_df = cl_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+        plot_data_distribution(cl_df, 'CL log-normalized', filename='cl_avg_before_log.pdf', width=1)
+
+        pg_df = pg_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+        plot_data_distribution(pg_df, 'PG log-normalized', filename='pg_avg_before_log.pdf', width=1)
+
+        avg_slatms = cl_df.subtract(pg_df)
+        plot_data_distribution(avg_slatms, 'Difference CL - PG', filename='difference_avg_before_log.pdf', width=1)
+        # avg_slatms.to_pickle(str(avg_path))
+    n_components = 10
     (pc_df,
      explained_variance,
      explained_variance_ratio,
@@ -588,27 +616,27 @@ def main():
     # plot_exp_variance_ratio(pc_df, explained_variance_ratio, n_components)
     # plot_pca(pc_df)
     # plot_scree_plot(explained_variance_ratio, n_components)
-    pc_df.to_pickle(f'{path}/weighted_average_PCA.pickle')
+    # pc_df.to_pickle(f'{path}/weighted_average_PCA.pickle')
     loadings = components.T * np.sqrt(explained_variance)
     loading_matrix = pd.DataFrame(loadings, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
                                   index=interactions_short)
     component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
                                     index=interactions_short)
-    component_matrix.to_pickle(f'{path}/weights_matrix.pickle')
-    sys.exit()
+    # component_matrix.to_pickle(f'{path}/weights_matrix.pickle')
     n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
     loading_matrix = loading_matrix.iloc[n_one_body:]
     # drop interactions that have a coefficient of zero in all principal components (not present in any sample)
     # loading_matrix = loading_matrix[~(loading_matrix == 0.0).all(axis=1)]
     loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
-    loading_matrix.to_pickle(f'{path}/loading_matrix.pickle')
+    # loading_matrix.to_pickle(f'{path}/loading_matrix.pickle')
     # TODO: move bead selection to input variables
     # select only interactions that contain at least one of the headgroup beads
-    # headgroups = ['Nda', 'P4', 'Qa', 'Na']
+    headgroups = ['Nda', 'P4']# ['Nda', 'P4', 'Qa', 'Na']
     # select only intramolecular interactions of the solutes
     # solutes = ['T1', 'T2', 'T3', 'T4', 'T5', 'Q0']
     # selection = [headgroups, solutes]
-    # plot_loading_plot(loading_matrix, selection, 0, 'headgroups', 'PC5')
+    selection = [headgroups]
+    plot_loading_plot(loading_matrix, selection, 0, 'headgroups', 'PC5')
     # plot_loading_plot(loading_matrix, selection, 1, 'solutes', 'PC5')
     # get_largest_correlations(loading_matrix.loc[:, [f'PC{str(idx + 1)}' for idx in range(n_components)]])
 

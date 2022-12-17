@@ -30,7 +30,6 @@ def get_nodes(one_body, pc):
 
 
 def get_node_idx(nodes_list, n1, n2):
-
     idx1, idx2 = None, None
     for idx, attributes in nodes_list:
         if attributes['name'] == n1:
@@ -212,8 +211,9 @@ if __name__ == '__main__':
                                                                              'one-body interactions')
     parser.add_argument('-two', '--two_body', type=Path, required=True, help='Pandas dataframe with PCA weights for '
                                                                              'two-body interactions')
-    parser.add_argument('-three', '--three_body', type=Path, required=True, help='Pandas dataframe with PCA weights for '
-                                                                                 'three-body interactions')
+    parser.add_argument('-three', '--three_body', type=Path, required=True,
+                        help='Pandas dataframe with PCA weights for '
+                             'three-body interactions')
     parser.add_argument('-pc', '--principal_component', type=str, required=True, help='Column name for weights to '
                                                                                       'analyze.')
     parser.add_argument('-n', '--name', type=str, required=False, default='interactions_graph.pdf',
