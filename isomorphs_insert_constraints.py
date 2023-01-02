@@ -44,8 +44,21 @@ def replace_constraints(template, itp_path):
 
 
 def get_itp(run_dirs, screen_round, molecule):
-    popg = list(run_dirs[0].glob(f'{screen_round}/{molecule}/**/molecule_*.itp'))[0]
-    cdl2 = list(run_dirs[1].glob(f'{screen_round}/{molecule}/**/molecule_*.itp'))[0]
+    popg, cdl2 = None, None
+    for run_dir in run_dirs:
+        path = run_dir / screen_round
+        if path.is_dir():
+            mol_path = path / molecule
+            if mol_path.is_dir():
+                if 'CDL2' in path.parts:
+                    cdl2 = list(mol_path.glob(f'**/molecule_*.itp'))[0]
+                else:
+                    popg = list(mol_path.glob(f'**/molecule_*.itp'))[0]
+            else:
+                break
+        else:
+            break
+
     return popg, cdl2
 
 
@@ -58,23 +71,24 @@ def process_molgraphs(dataframe, graphs, run_dirs):
         graphs = pickle.load(open(graphs, 'rb'))
         for idx, graph in enumerate(graphs):
             molecule = f'molecule_{str(idx).zfill(2)}'
+            # get_itp(run_dirs, screen_round, molecule)
             pg_itp, cl_itp = get_itp(run_dirs, screen_round, molecule)
-            template = find_isomorphs(df, graph)
-            new_topology = replace_constraints(template, pg_itp)
-            pg_itp.write_text(new_topology)
-            cl_itp.write_text(new_topology)
+            if pg_itp is not None and cl_itp is not None:
+                template = find_isomorphs(df, graph)
+                new_topology = replace_constraints(template, pg_itp)
+                pg_itp.write_text(new_topology)
+                cl_itp.write_text(new_topology)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Find isomorphs to example graphs, identify mapped node indices, adjust '
                                      'constraints and update topology file.')
-    parser.add_argument('-df', '--dataframe', type=Path, required=True, help='Pandas Dataframe with example graphs as '
-                                                                             'networkx object and relevant bonds, '
-                                                                             'constraints, angles, virtual sites or '
-                                                                             'dihedrals.')
+    parser.add_argument('-df', '--dataframe', type=Path, required=True,
+                        help='Pandas Dataframe with example graphs as networkx object and relevant bonds, constraints, '
+                             'angles, virtual sites or dihedrals.')
     parser.add_argument('-g', '--graphs', type=Path, required=True, help='Pkl files with graphs as networkx objects.')
-    parser.add_argument('-itp', '--topology', type=Path, nargs='+', required=True, help='Path to base directory with '
-                                                                                        'run input files.')
+    parser.add_argument('-itp', '--topology', type=Path, nargs='+', required=True,
+                        help='Path to base directory with run input files. CL first, PG second.')
     args = parser.parse_args()
     
     process_molgraphs(args.dataframe, args.graphs, args.topology)

@@ -10,10 +10,10 @@ import numpy as np
 import warnings
 import regex as re
 
+import MDAnalysis as mda
 import preprocessing
 import generate_representations
 import clean_trajectories
-import MDAnalysis as mda
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
@@ -67,7 +67,7 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
     tpr = re.compile(r'prod-(79|39).tpr$')
     xtc = re.compile(r'prod-(79|39).xtc$')
     if len([str(path) for path in list(cdl2_results.rglob('ROUND_*/molecule_*/**/*')) if re.search(tpr, path.name)]) - \
-            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) > 5:
+            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) > 1:
         print('Cleaning up trajectory...')
         for cl_round_mols, pg_round_mols in zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False),
                                                 sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)):
@@ -201,27 +201,20 @@ if __name__ == '__main__':
                                                                                ' stratified selectivities.')
     parser.add_argument('-b', '--batch', type=str, required=False, default=str(0),
                         help='Number of rerun batch to be processed.')
-    parser.add_argument('-mbt', '--mbtypes', type=Path, required=False, help='OPTIONAL: Pickled dictionary containing '
-                                                                             'lists:\n'
-                                                                             'Key: \'mbtypes\' - all multi-body '
-                                                                             'interactions in the whole data set.\n'
-                                                                             'Key: \'charges\' - dictionary containing '
-                                                                             'mock charges that act as unique '
-                                                                             'identifiers for the individual bead '
-                                                                             'types.\n'
-                                                                             'Key: \'mapping\' - dictionary containing '
-                                                                             'bead-type to bead-type pairs for renaming'
-                                                                             ' Gromacs-types and S-types to regular '
-                                                                             'Martini or T-beads.')
-    parser.add_argument('-cmp', '--compounds', type=Path, required=False, help='OPTIONAL: Pandas dataframe with columns'
-                                                                               '[\'rounds\', \'molecules\', \'types\'] '
-                                                                               'containing list [solute bead types] per'
-                                                                               ' molecule and round.')
-    parser.add_argument('-slatms', type=Path, required=False, help='OPTIONAL: Pandas dataframe with SLATM '
-                                                                   'representations of all systems.\n'
-                                                                   'columns: \'rounds\', \'mols\', \'lipids\', '
-                                                                   '\'SLATMS\'.\n'
-                                                                   'SLATMs will be generated if not provided.')
+    parser.add_argument('-mbt', '--mbtypes', type=Path, required=False,
+                        help='OPTIONAL: Pickled dictionary containing lists:\n'
+                             'Key: \'mbtypes\' - all multi-body interactions in the whole data set.\n'
+                             'Key: \'charges\' - dictionary containing mock charges that act as unique identifiers for '
+                             'the individual bead types.\n'
+                             'Key: \'mapping\' - dictionary containing bead-type to bead-type pairs for renaming '
+                             'Gromacs-types and S-types to regular Martini or T-beads.')
+    parser.add_argument('-cmp', '--compounds', type=Path, required=False,
+                        help='OPTIONAL: Pandas dataframe with columns [\'rounds\', \'molecules\', \'types\'] '
+                             'containing list [solute bead types] per molecule and round.')
+    parser.add_argument('-slatms', type=Path, required=False,
+                        help='OPTIONAL: Pandas dataframe with SLATM representations of all systems.\n'
+                             'columns: \'rounds\', \'mols\', \'lipids\', \'SLATMS\'.\n '
+                             'SLATMs will be generated if not provided.')
 
     args = parser.parse_args()
 

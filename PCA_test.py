@@ -1,7 +1,7 @@
 import sys
 import warnings
 from collections import defaultdict
-from collections import ChainMap
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -15,7 +15,7 @@ from matplotlib import colors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import seaborn as sns
 from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA, SparsePCA
+from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
 import sklearn
@@ -27,25 +27,46 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
 
-sns.set_style('whitegrid')
+# sns.set_style('whitegrid')
+sns.set(style='whitegrid', palette='deep')
+sns.set_context(context='paper', font_scale=2)
 
 
-def load_data():
-    slatms_path = Path('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/SLATMS')
-    df = pd.DataFrame()
-    for cl, pg in zip(sorted(slatms_path.glob('SLATMS-CDL2-batch_*.pickle')),
-                      sorted(slatms_path.glob('SLATMS-POPG-batch_*.pickle'))):
-        cl_df = pd.read_pickle(cl)
-        pg_df = pd.read_pickle(pg)
+# TODO: clean up this MESS! Handle data input via argparse, add flags for toggling processing/plotting, integrate
+#  option for providing/modeling test data, load deltaG_W->Ol values via text file. COMMENT!
+
+
+def load_data(slatms_path, test):
+    if test is None:
+        df = pd.DataFrame()
+        for cl, pg in zip(sorted(slatms_path.glob('SLATMS-CDL2-batch_*.pickle')),
+                          sorted(slatms_path.glob('SLATMS-POPG-batch_*.pickle'))):
+            cl_df = pd.read_pickle(cl)
+            pg_df = pd.read_pickle(pg)
+            merged_df = pd.merge(cl_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
+                                 pg_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
+                                 on=['round', 'solute'], how='inner', suffixes=('_cl', '_pg'))
+            df = pd.concat([df, merged_df], ignore_index=True)
+        df.sort_values(['round', 'solute'], ascending=[True, True], inplace=True,
+                       ignore_index=True)
+        deltaG = pd.read_pickle('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/FE-results_all_rounds.pickle')
+        deltaG.rename(columns={'rounds': 'round', 'molecules': 'solute', 'ΔΔG PG->CL': 'DeltaDeltaG'}, inplace=True)
+        df = pd.merge(df, deltaG[['round', 'solute', 'DeltaDeltaG']], on=['round', 'solute'], how='inner')
+    else:
+        df = pd.DataFrame()
+        cl_df, pg_df = None, None
+        for path in test:
+            if 'CDL2' in path.name:
+                cl_df = pd.read_pickle(path)
+            else:
+                pg_df = pd.read_pickle(path)
+
         merged_df = pd.merge(cl_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
                              pg_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
                              on=['round', 'solute'], how='inner', suffixes=('_cl', '_pg'))
         df = pd.concat([df, merged_df], ignore_index=True)
-    df.sort_values(['round', 'solute'], ascending=[True, True], inplace=True,
-                   ignore_index=True)
-    deltaG = pd.read_pickle('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/FE-results_all_rounds.pickle')
-    df = pd.merge(df, deltaG[['round', 'solute', 'DeltaDeltaG']],
-                  on=['round', 'solute'], how='inner')
+        df.sort_values(['round', 'solute'], ascending=[True, True], inplace=True,
+                       ignore_index=True)
     mbt_df = pd.read_pickle('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/mbtypes_charges_mapping_new.pkl')
     mbtypes = mbt_df['mbtypes']
     charges = mbt_df['charges']
@@ -72,10 +93,6 @@ def get_non_empty(beads_list):
     return existing_beads
 
 
-# def get_difference(cl_vec, pg_vec):
-#     return np.subtract(cl_vec, pg_vec)
-
-
 def calculate_avg(bead1, bead2, bead3, bead4, bead5):
     slatms = get_non_empty([bead1, bead2, bead3, bead4, bead5])
     # np.vstack(slatms)
@@ -96,20 +113,6 @@ def get_bead_averages(df):
     return cl_df, pg_df
 
 
-"""
- Generate covariance-matrix and calculate eigenvectors and eigenvalues (eigenvalues = coefficients).
-"""
-
-
-# def get_lognorm_distance(cl_vec, pg_vec):
-#     alpha = np.divide(1, np.power(10, np.divide(99, 10)))
-#     cl = log_addition(cl_vec, alpha)
-#     pg = log_addition(pg_vec, alpha)
-#     distances = get_difference(cl, pg)
-
-#     return distances
-
-
 def calculate_weights(df):
     weights = pd.DataFrame(index=df.index, columns=df.columns)
     if len(df.columns) == 1:
@@ -117,7 +120,10 @@ def calculate_weights(df):
     else:
         for idx, row in df.iterrows():
             sum_ = row.sum()
-            frac = 1 / sum_
+            if sum_ == 0.0:
+                frac = 0.0
+            else:
+                frac = 1 / sum_
             weights.loc[idx] = row.multiply(other=frac)
 
     return weights
@@ -225,17 +231,26 @@ def add_alpha(data):
     return np.where(data < alpha, alpha, data)
 
 
-def calculate_PCA(slatms, selectivities, n_components=3):
+def calculate_PCA(slatms, selectivities, test_data=None, n_components=3):
     pca = PCA(n_components=n_components, random_state=1)
-    X = pca.fit_transform(slatms)
-    explained_variance_ratio = pca.explained_variance_ratio_
-    explained_variance = pca.explained_variance_
-    components = pca.components_
-    # covariance = pca.get_covariance()
-    pc_df = pd.DataFrame(X)
-    pc_df['dist'] = np.linalg.norm(slatms, axis=1)
-    pc_df['sol'] = selectivities.agg(lambda x: f"{x['round']} {x['solute']}", axis=1)
-    pc_df['selec'] = list(selectivities['DeltaDeltaG'])
+    X_train = pca.fit_transform(slatms)
+    if test_data is None:
+        explained_variance_ratio = pca.explained_variance_ratio_
+        explained_variance = pca.explained_variance_
+        components = pca.components_
+        # covariance = pca.get_covariance()
+        pc_df = pd.DataFrame(X_train)
+        pc_df['dist'] = np.linalg.norm(slatms, axis=1)
+        pc_df['sol'] = selectivities.agg(lambda x: f"{x['round']} {x['solute']}", axis=1)
+        pc_df['selec'] = list(selectivities['DeltaDeltaG'])
+    else:
+        X_test = pca.transform(test_data)
+        explained_variance_ratio = pca.explained_variance_ratio_
+        explained_variance = pca.explained_variance_
+        components = pca.components_
+        pc_df = pd.DataFrame(X_test)
+        pc_df['dist'] = np.linalg.norm(test_data, axis=1)
+        pc_df['sol'] = selectivities.agg(lambda x: f"{x['round']} {x['solute']}", axis=1)
 
     return pc_df, explained_variance, explained_variance_ratio, components  # , covariance
 
@@ -291,22 +306,20 @@ def plot_scree_plot(evr, n_components):
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9))
     x = np.arange(n_components) + 1
     ax.bar(x, evr * 100, alpha=0.7)
-    # ax.autoscale(True)
-    # ax.margins(x=0.05, y=1)
     sum_evr = np.array([])
     for idx, e in enumerate(evr):
         if idx > 0:
             sum_evr = np.append(sum_evr, sum(evr[:idx+1]))
         else:
             sum_evr = np.append(sum_evr, e)
+    print(sum_evr * 100)
     ax1 = ax.twinx()
-    # ax1.margins(x=0.05, y=1)
     ax1.plot(x, sum_evr * 100, marker='o', linewidth=2, color='k')
     ax.set_ylim([0.0, 35.0])
     ax1.set_ylim([20.0, 90.0])
-    ax.set_ylabel('Variance explained [%]', fontsize=18)
-    ax1.set_ylabel(r'$\sum$ Variance explained [%]', fontsize=18, rotation=-90, labelpad=30)
-    ax.set_xlabel('Components', fontsize=18)
+    ax.set_ylabel('Variance explained [%]', fontsize=28)
+    ax1.set_ylabel(r'$\sum$ Variance explained [%]', fontsize=28, rotation=-90, labelpad=40)
+    ax.set_xlabel('Components', fontsize=28)
     ax.set_xticks(x)
     ax1.set_xticks(x)
     ax1.grid(False)
@@ -360,9 +373,9 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
     norm = mpl.colors.Normalize(vmin=bin_edges[0], vmax=bin_edges[-1])
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    fig = plt.figure(constrained_layout=True, figsize=(16, 3*(len(selection[group]))), dpi=150)
+    fig = plt.figure(constrained_layout=True, figsize=(18, 3*(len(selection[group]))), dpi=150)
     gs = mpl.gridspec.GridSpec(nrows=len(selection[group]), ncols=2, figure=fig, left=0.02, bottom=0.02, right=0.98,
-                               top=None, wspace=None, hspace=None, width_ratios=[3, 13], height_ratios=None)
+                               top=None, wspace=None, hspace=None, width_ratios=[2, 14], height_ratios=None)
     pcs = {f'PC{str(idx + 1)}': idx for idx in range(len(loadings.columns))}
     cutoff = 1.0
     n_two_body = len([idx for idx in loadings.index if len(idx.split('-')) == 2])
@@ -386,7 +399,7 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
         else:
             lipid = 'PG'
         # ax.set_ylabel(f'Loadings, headgrp. bead: {selection[group][idx]}')
-        ax.set_ylabel(f'{lipid}', fontsize=18)
+        ax.set_ylabel(f'{lipid}', fontsize=22)  # , rotation=0
 
     three_body = loadings.iloc[n_two_body:, [pcs[pc], loadings.columns.get_loc('hydrophobicity')]]
     three_body = three_body.loc[three_body[pc].abs().nlargest(len(three_body.index)).index]
@@ -406,10 +419,10 @@ def plot_loading_plot(loadings, selection, group, group_name, pc):
         ax = fig.add_subplot(gs[idx, 1])
         ax.bar(sel.index, sel[pc], color=color_list)
         cbar = plt.colorbar(sm, pad=0.01)
-        cbar.set_label(r'$\Delta G_{W\rightarrow Ol}$', rotation=270, labelpad=20, fontsize=16)
+        cbar.set_label(r'$\Delta G_{W\rightarrow Ol}$', rotation=270, labelpad=20, fontsize=20)
         ax.tick_params(axis='x', rotation=45)
         ax.margins(x=0.01)
-    fig.suptitle(f'{pc}', size=20)
+    fig.suptitle(f'{pc}', fontsize=22)
     plt.savefig(f'{path}/{group_name}_{pc}_loading-plot_cutoff-{cutoff}.pdf')
     # plt.show()
 
@@ -427,153 +440,36 @@ def check_if_present(first, second, idx_list):
     return True
 
 
-# def get_largest_correlations(weight_corr):
-#     path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
-#     weight_corr = weight_corr.T
-#     weight_corr = weight_corr.corr()
-#     corr_stack = weight_corr.stack()
-#     corr_stack = corr_stack[corr_stack.index.get_level_values(0) != corr_stack.index.get_level_values(1)]
-#     sim_idx = list()
-#     for first, second in corr_stack.index.tolist():
-#         _first = first.split('-')
-#         _second = second.split('-')
-#         if len(_first) < len(_second):
-#             for element in _first:
-#                 if element in _second:
-#                     _second.remove(element)
-#                 else:
-#                     break
-#                 if len(_second) < len(_first):
-#                     if (first, second) not in sim_idx and (second, first) not in sim_idx:
-#                         sim_idx.append((first, second))
-#         elif len(_first) > len(_second):
-#             for element in _second:
-#                 if element in _first:
-#                     _first.remove(element)
-#                 else:
-#                     break
-#                 if len(_first) < len(_second):
-#                     if (first, second) not in sim_idx and (second, first) not in sim_idx:
-#                         sim_idx.append((first, second))
-#     ident_idx = list()
-#     for first, second in corr_stack.index.tolist():
-#         _first = first.split('-')
-#         _second = second.split('-')
-#         if len(_first) == len(_second):
-#             if sorted(_first) == sorted(_second):
-#                 if (first, second) not in ident_idx and (second, first) not in ident_idx:
-#                     ident_idx.append((first, second))
-#     similar = corr_stack.loc[sim_idx]
-#     similar = similar.loc[similar.abs().nlargest(len(similar.index)).index]
-#     sim1, sim2 = map(list, zip(*similar.abs().nlargest(20).index.tolist()))
-#     similar = weight_corr.loc[sim1, sim2]
-#     # sim_fig = plt.figure(figsize=(9, 8), dpi=150)
-#     min_ = min(similar.min())
-#     max_ = max(similar.max())
-#     if min_ < 0:
-#         center = 0.0
-#     else:
-#         center = ((max_ - min_) / 2) + min_
-#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-#     # sim_ax = sns.heatmap(similar, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
-#     # plt.yticks(rotation=0)
-#     # plt.xticks(rotation=45)
-#     # plt.tight_layout()
-#     # plt.savefig(f'{path}/correlation_two-body_three_body.pdf')
-#     identical = corr_stack.loc[ident_idx]
-#     identical = corr_stack.loc[identical.abs().nlargest(len(identical.index)).index]
-#     ident1, ident2 = map(list, zip(*identical.abs().nlargest(20).index.tolist()))
-#     identical = weight_corr.loc[ident1, ident2]
-#     # ident_fig = plt.figure(figsize=(9, 8), dpi=150)
-#     # min_ = min(identical.min())
-#     # max_ = max(identical.max())
-#     # if min_ < 0:
-#     #     center = 0.0
-#     # else:
-#     #     center = ((max_ - min_) / 2) + min_
-#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-#     # ident_ax = sns.heatmap(identical, annot=True, square=True, fmt=".1f",
-#     #                        cmap='bwr', norm=divnorm)
-#     # plt.tight_layout()
-#     # plt.savefig(f'{path}/correlation_three-body_three_body.pdf')
-#     sim_idx.extend(ident_idx)
-#     try:
-#         different = pd.read_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
-#     except FileNotFoundError:
-#         all_pairs = corr_stack.index.tolist()
-#         print(len(all_pairs))
-#         keep_idx = list()
-#         for idx in tqdm(all_pairs):
-#             first = sorted(idx[0].split('-'))
-#             second = sorted(idx[1].split('-'))
-#             if idx not in sim_idx and (idx[1], idx[0]) not in sim_idx:
-#                 keep_idx.append(idx)
-#             else:
-#                 try:
-#                     all_pairs.remove(idx)
-#                     all_pairs.remove((idx[1], idx[0]))
-#                 except ValueError:
-#                     pass
-#             last_elem = sim_idx[-1]
-#             for old_idx in sim_idx:
-#                 old_first = sorted(old_idx[0].split('-'))
-#                 old_second = sorted(old_idx[1].split('-'))
-#                 if first == old_first and second == old_second:
-#                     try:
-#                         all_pairs.remove(idx)
-#                         all_pairs.remove((idx[1], idx[0]))
-#                     except ValueError:
-#                         pass
-#                 elif first == old_second and second == old_first:
-#                     try:
-#                         all_pairs.remove(idx)
-#                         all_pairs.remove((idx[1], idx[0]))
-#                     except ValueError:
-#                         pass
-#                     continue
-#                 else:
-#                     if old_idx == last_elem:
-#                         keep_idx.append(idx)
-#                         try:
-#                             all_pairs.remove(idx)
-#                             all_pairs.remove((idx[1], idx[0]))
-#                         except ValueError:
-#                             pass
-#         print(len(all_pairs))
-#         print(keep_idx)
-#         for first, second in tqdm(all_pairs):
-#             check_new = check_if_present(first, second, keep_idx)
-#             if check_new:
-#                 keep_idx.append((first, second))
-#         print(keep_idx)
-#         different = corr_stack.loc[keep_idx]
-#         different = different.loc[different.abs().nlargest(len(keep_idx)).index]
-#         diff1, diff2 = map(list, zip(*different.abs().nlargest(len(keep_idx)).index.tolist()))
-#         save_ = weight_corr.loc[diff1, diff2]
-#         save_.to_pickle(f'{path}/different_interactions_correlation_matrix_all.pickle')
-#         del save_
-#         diff1, diff2 = map(list, zip(*different.abs().nlargest(20).index.tolist()))
-#         different = weight_corr.loc[diff1, diff2]
-#         # different.to_pickle(f'{path}/different_interactions_correlation_matrix.pickle')
-#     # diff_fig = plt.figure(figsize=(9, 8), dpi=150)
-#     # min_ = min(different.min())
-#     # max_ = max(different.max())
-#     # if min_ < 0:
-#     #     center = 0.0
-#     # else:
-#     #     center = ((max_ - min_) / 2) + min_
-#     # print(min_, center, max_)
-#     # divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
-#     # diff_ax = sns.heatmap(different, annot=True, square=True, fmt=".1f", cmap='bwr', norm=divnorm)  #
-#     # plt.yticks(rotation=0)
-#     # plt.xticks(rotation=45)
-#     # plt.tight_layout()
-#     # plt.savefig(f'{path}/correlation_differences.pdf')
+def preprocess_slatms(df, interactions, interactions_short, path, plotting):
+    cl_df, pg_df = get_bead_averages(df)
+    cl_df = calculate_weighted_averages(np.vstack(cl_df.cl_avg.values), interactions[:-1], interactions_short)
+    if plotting:
+        plot_data_distribution(cl_df, 'CL averaged', filename='cl_raw_distribution_avg.pdf', width=50000)
+
+    pg_df = calculate_weighted_averages(np.vstack(pg_df.pg_avg.values), interactions[:-1], interactions_short)
+    if plotting:
+        plot_data_distribution(pg_df, 'PG averaged', filename='pg_raw_distribution_avg.pdf', width=50000)
+
+    cl_df = cl_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+    if plotting:
+        plot_data_distribution(cl_df, 'CL log-normalized', filename='cl_avg_before_log.pdf', width=1)
+
+    pg_df = pg_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+    if plotting:
+        plot_data_distribution(pg_df, 'PG log-normalized', filename='pg_avg_before_log.pdf', width=1)
+
+    processed_slatms = cl_df.subtract(pg_df)
+    if plotting:
+        plot_data_distribution(processed_slatms, 'Difference CL - PG', filename='difference_avg_before_log.pdf', width=1)
+    processed_slatms.to_pickle(str(path))
+
+    return processed_slatms
 
 
-def main():
-    path = '/home/bernadette/Documents/STRUCTURAL_ANALYSIS'
-    df, mbtypes, charges, mapping = load_data()
+def main(test=None, plotting=False):
+    path = Path('/home/bernadette/Documents/STRUCTURAL_ANALYSIS')
+    slatm_path = path / 'SLATMS'
+    df, mbtypes, charges, mapping = load_data(slatm_path, test=test)
     # extract interactions represented by individual SLATM bins.
     interactions = get_interactions(mbtypes, charges)
     interactions_short = list()
@@ -587,61 +483,85 @@ def main():
                'T1': 2.052, 'T2': 1.906, 'T3': 0.098, 'T3a': 0.098, 'T3d': 0.098, 'T4': -2.455, 'T5': -3.129
                }
     # avg_path = ''
-    avg_path = Path('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/weighted_avg_log_norm_difference_SLATMs.pickle')
+    filename = 'weighted_avg_log_norm_difference_SLATMs.pickle'
+    train_path = path / filename
     try:
-        avg_slatms = pd.read_pickle(avg_path)
+        avg_slatms = pd.read_pickle(train_path)
     except FileNotFoundError:
-        cl_df, pg_df = get_bead_averages(df)
+        avg_slatms = preprocess_slatms(df, interactions, interactions_short, train_path, plotting)
+    n_components = 6
+    if test is None:
+        (pc_df,
+         explained_variance,
+         explained_variance_ratio,
+         components) = calculate_PCA(avg_slatms, selectivities=df[['round', 'solute', 'DeltaDeltaG']],
+                                     n_components=n_components)
+        # plot_exp_variance_ratio(pc_df, explained_variance_ratio, n_components)
+        # plot_pca(pc_df)
+        plot_scree_plot(explained_variance_ratio, n_components)
+        # pc_df.to_pickle(f'{path}/weighted_average_PCA_6PCs.pickle')
+        loadings = components.T * np.sqrt(explained_variance)
+        loading_matrix = pd.DataFrame(loadings, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
+                                      index=interactions_short)
+        component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
+                                        index=interactions_short)
+        # component_matrix.to_pickle(f'{path}/weights_matrix_6PCs.pickle')
+        n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
+        loading_matrix = loading_matrix.iloc[n_one_body:]
+        # drop interactions that have a coefficient of zero in all principal components (not present in any sample)
+        # loading_matrix = loading_matrix[~(loading_matrix == 0.0).all(axis=1)]
+        loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
+        # loading_matrix.to_pickle(f'{path}/loading_matrix_6PCs.pickle')
+        # TODO: move bead selection to input variables
+        # select only interactions that contain at least one of the headgroup beads
+        headgroups = ['Nda', 'P4']  # ['Nda', 'P4', 'Qa', 'Na']
+        # select only intramolecular interactions of the solutes
+        # solutes = ['T1', 'T2', 'T3', 'T4', 'T5', 'Q0']
+        # selection = [headgroups, solutes]
+        selection = [headgroups]
+        # plot_loading_plot(loading_matrix, selection, 0, 'headgroups', 'PC4')
+        # plot_loading_plot(loading_matrix, selection, 1, 'solutes', 'PC5')
+        # get_largest_correlations(loading_matrix.loc[:, [f'PC{str(idx + 1)}' for idx in range(n_components)]])
+    else:
+        test_df, _, _, _ = load_data(slatm_path, test=test)
+        columns = test_df[['round', 'solute']]
+        test_path = path / 'weighted_avg_log_norm_difference_SLATMs_test-data.pickle'
+        # test_path = ''
+        try:
+            test_slatms = pd.read_pickle(test_path)
+        except FileNotFoundError:
+            test_slatms = preprocess_slatms(test_df, interactions, interactions_short, test_path, plotting)
 
-        cl_df = calculate_weighted_averages(np.vstack(cl_df.cl_avg.values), interactions[:-1], interactions_short)
-        plot_data_distribution(cl_df, 'CL averaged', filename='cl_raw_distribution_avg.pdf', width=50000)
+        (pc_df,
+         explained_variance,
+         explained_variance_ratio,
+         components) = calculate_PCA(avg_slatms, columns, test_data=test_slatms, n_components=n_components)
 
-        pg_df = calculate_weighted_averages(np.vstack(pg_df.pg_avg.values), interactions[:-1], interactions_short)
-        plot_data_distribution(pg_df, 'PG averaged', filename='pg_raw_distribution_avg.pdf', width=50000)
-
-        cl_df = cl_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
-        plot_data_distribution(cl_df, 'CL log-normalized', filename='cl_avg_before_log.pdf', width=1)
-
-        pg_df = pg_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
-        plot_data_distribution(pg_df, 'PG log-normalized', filename='pg_avg_before_log.pdf', width=1)
-
-        avg_slatms = cl_df.subtract(pg_df)
-        plot_data_distribution(avg_slatms, 'Difference CL - PG', filename='difference_avg_before_log.pdf', width=1)
-        # avg_slatms.to_pickle(str(avg_path))
-    n_components = 10
-    (pc_df,
-     explained_variance,
-     explained_variance_ratio,
-     components) = calculate_PCA(avg_slatms, df[['round', 'solute', 'DeltaDeltaG']], n_components=n_components)
-    # plot_exp_variance_ratio(pc_df, explained_variance_ratio, n_components)
-    # plot_pca(pc_df)
-    # plot_scree_plot(explained_variance_ratio, n_components)
-    # pc_df.to_pickle(f'{path}/weighted_average_PCA.pickle')
-    loadings = components.T * np.sqrt(explained_variance)
-    loading_matrix = pd.DataFrame(loadings, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
-                                  index=interactions_short)
-    component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
-                                    index=interactions_short)
-    # component_matrix.to_pickle(f'{path}/weights_matrix.pickle')
-    n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
-    loading_matrix = loading_matrix.iloc[n_one_body:]
-    # drop interactions that have a coefficient of zero in all principal components (not present in any sample)
-    # loading_matrix = loading_matrix[~(loading_matrix == 0.0).all(axis=1)]
-    loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
-    # loading_matrix.to_pickle(f'{path}/loading_matrix.pickle')
-    # TODO: move bead selection to input variables
-    # select only interactions that contain at least one of the headgroup beads
-    headgroups = ['Nda', 'P4']# ['Nda', 'P4', 'Qa', 'Na']
-    # select only intramolecular interactions of the solutes
-    # solutes = ['T1', 'T2', 'T3', 'T4', 'T5', 'Q0']
-    # selection = [headgroups, solutes]
-    selection = [headgroups]
-    plot_loading_plot(loading_matrix, selection, 0, 'headgroups', 'PC5')
-    # plot_loading_plot(loading_matrix, selection, 1, 'solutes', 'PC5')
-    # get_largest_correlations(loading_matrix.loc[:, [f'PC{str(idx + 1)}' for idx in range(n_components)]])
+        pc_df.to_pickle(f'{path}/weighted_average_PCA_{str(n_components)}PCs_test-data.pickle')
+        loadings = components.T * np.sqrt(explained_variance)
+        loading_matrix = pd.DataFrame(loadings, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
+                                      index=interactions_short)
+        component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
+                                        index=interactions_short)
+        component_matrix.to_pickle(f'{path}/weights_matrix_{str(n_components)}PCs_test-data.pickle')
+        # n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
+        # loading_matrix = loading_matrix.iloc[n_one_body:]
+        # # drop interactions that have a coefficient of zero in all principal components (not present in any sample)
+        # loading_matrix = loading_matrix[~(loading_matrix == 0.0).all(axis=1)]
+        loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
+        loading_matrix.to_pickle(f'{path}/loading_matrix_{str(n_components)}PCs_test-data.pickle')
 
     # TODO: df[df.selec == df.selec.min()], df[df.selec == df.selec.max()], df.iloc[df.selec.sub(0.0).abs().idxmin()]
 
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser('Analyze SLATM representations of MD-Trajectories. '
+                                     'Optional: make predictions on test data.')
+    parser.add_argument('-t', '--test', type=Path, required=False, nargs=2, default=None,
+                        help='Paths to test data: two dataframes with SLATM representations '
+                             'in two different environments.')
+    parser.add_argument('-pp', '--preprocess_plotting', type=bool, required=False, default=False,
+                        help='Boolean: generate Plots of data distribution throughouth preprocessing? Only relevant if '
+                             'No preprocessed SLATMs are passed.')
+    args = parser.parse_args()
+    main(args.test, args.preprocess_plotting)
