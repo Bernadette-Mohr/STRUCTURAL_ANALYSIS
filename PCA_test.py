@@ -54,19 +54,13 @@ def load_data(slatms_path, test):
         df = pd.merge(df, deltaG[['round', 'solute', 'DeltaDeltaG']], on=['round', 'solute'], how='inner')
     else:
         df = pd.DataFrame()
-        cl_df, pg_df = None, None
-        for path in test:
-            if 'CDL2' in path.name:
-                cl_df = pd.read_pickle(path)
-            else:
-                pg_df = pd.read_pickle(path)
-
+        cl_df = [pd.read_pickle(path) for path in test if 'CDL2' in path.name][0]
+        pg_df = [pd.read_pickle(path) for path in test if 'POPG' in path.name][0]
         merged_df = pd.merge(cl_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
                              pg_df[['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5']],
                              on=['round', 'solute'], how='inner', suffixes=('_cl', '_pg'))
         df = pd.concat([df, merged_df], ignore_index=True)
-        df.sort_values(['round', 'solute'], ascending=[True, True], inplace=True,
-                       ignore_index=True)
+        df.sort_values(['round', 'solute'], ascending=[True, True], inplace=True, ignore_index=True)
     mbt_df = pd.read_pickle('/home/bernadette/Documents/STRUCTURAL_ANALYSIS/mbtypes_charges_mapping_new.pkl')
     mbtypes = mbt_df['mbtypes']
     charges = mbt_df['charges']
