@@ -1,5 +1,4 @@
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -13,6 +12,7 @@ from matplotlib.lines import Line2D
 import matplotlib.gridspec as gridspec
 
 sns.set(style='white', palette='deep')
+
 
 def get_group(beads, unique):
     for idx, unq in enumerate(unique):
@@ -39,8 +39,6 @@ def filter_df(df):
     filtered = pd.DataFrame(columns=df.columns)
     groups = df.groupby(by='groups')
     for group, interactions in groups:
-        # if 1 < len(interactions) < 3:
-        # if len(interactions.index) > 2:
         if len(interactions.index) > 1:
             filtered = pd.concat([filtered, interactions])
     print(filtered.iloc[:, [0, 1, 2, 3, 4, -1]])
@@ -59,7 +57,6 @@ def generate_subgraphs(df, pc, n):
     subgraphs_small = list()
     subgraphs_large = list()
     for subraphs, subgraphs_list in [[small, subgraphs_small], [large, subgraphs_large]]:
-        # print(subraphs, subgraphs_list)
         for pat in subraphs.index.tolist():
             beads = pat.split('-')
             nodes = list()
@@ -74,49 +71,6 @@ def generate_subgraphs(df, pc, n):
             subgraphs_list.append(graph)
 
     return subgraphs_small, subgraphs_large
-
-
-def generate_overlaps(subgraphs_list):
-    graph = nx.Graph()
-    for subgraph in subgraphs_list:
-        # print('orig', subgraph)
-        if not graph:
-            graph = nx.disjoint_union(graph, subgraph)
-        else:
-            n_graph = graph.number_of_nodes() - 1
-            glabels = nx.get_node_attributes(graph, 'name')
-            # gcounts = nx.get_node_attributes()
-            print(glabels)
-            n_sub = subgraph.number_of_nodes() - 1
-            sublabels = nx.get_node_attributes(subgraph, 'name')
-            # print(sublabels)
-            if graph.number_of_nodes() > 2:
-                if sublabels[n_sub] == glabels[n_graph] and sublabels[n_sub - 1] == glabels[n_graph - 1]:
-                    print('last and middle')
-                    subgraph.remove_nodes_from([n_sub, n_sub - 1])
-                    graph.nodes[n_graph]['count'] += 1
-                    graph[n_sub][n_graph]['weight'] += 1
-                    graph.nodes[n_graph - 1]['count'] += 1
-                    graph[n_sub - 1][n_graph - 1]['weight'] += 1
-                    # print('removed', subgraph)
-                    graph = nx.disjoint_union(graph, subgraph)
-                elif sublabels[0] == glabels[0]:
-                    print('first')
-                    subgraph.remove_nodes_from([0])
-                    count = graph.nodes[0]['count']
-                    count += 1
-                    graph.nodes[0]['count'] = count
-                    # print('removed', subgraph)
-                    graph = nx.disjoint_union(graph, subgraph)
-                else:
-                    pass
-            else:
-                pass
-
-            # sys.exit()
-    print('graph', graph)
-    print(graph.nodes.data())
-    print(graph.edges.data())
 
 
 def split_interaction(interaction):
@@ -135,7 +89,6 @@ def get_subgraph_attributes(subgraph, positions, bead_colormap, lipid_color):
     else:
         shape = 'o'
         sub_colormap = np.vectorize(bead_colormap.get)(list(labels.values()))
-        # np.vectorize(bead_colormap.get)(list(labels.values()))
     edgecolors = list()
     for idx in subgraph.nodes():
         if subgraph.nodes[idx]['kind'] == 'lipid':
@@ -165,11 +118,10 @@ class GraphBuilder:
 
     def build_graph(self, interactions, lipid):
         graph = nx.Graph()
-        # graph.add_nodes_from(nodes)
         if lipid == 'Nda':
-            lipid_color = '#a50000'  # '#880000'
+            lipid_color = '#a50000'
         else:
-            lipid_color = '#0209b1'  # '#003366'
+            lipid_color = '#0209b1'
         lipid_beads = {'Nda': 'CL', 'P4': 'PG'}
         lipid_bead = lipid_beads[lipid]
         for interaction in interactions.index.tolist():
@@ -193,11 +145,9 @@ class GraphBuilder:
 
     def draw_graph(self, graph, lipid_color, lipid_bead, ax):
         labels = nx.get_node_attributes(graph, 'name')
-        # node_weights = nx.get_node_attributes(graph, 'weight')
         node_colors = nx.get_node_attributes(graph, 'color')
         bead_colormap = {labels[bead]: color for bead, color in node_colors.items()}
         positions = nx.circular_layout(graph)
-        colors = np.vectorize(bead_colormap.get)(list(labels.values()))
         legend_elements = [Line2D([0], [0], marker='o', color='w', label='Solute', markerfacecolor='w',
                                   markeredgecolor='k', markeredgewidth=2, markersize=15),
                            Line2D([0], [0], marker='8', color='w', label=lipid_bead, markerfacecolor='w',
@@ -229,8 +179,7 @@ class GraphBuilder:
          shape) = get_subgraph_attributes(subgraphs['lipid'], positions, bead_colormap, lipid_color)
         nx.draw_networkx_nodes(subgraphs['lipid'], positions, node_color=sub_colormap, node_size=1500,
                                edgecolors=sub_edges, linewidths=2, node_shape=shape, ax=ax)
-        # nx.draw_networkx_nodes(graph, positions, node_color=colors, node_size=1500,
-        #                        edgecolors=edgecolors, linewidths=2, node_shape='o', alpha=0.9, ax=ax)
+
         nx.draw_networkx_labels(graph, positions, labels, font_size=14, font_weight='bold', ax=ax)
         edge_widths = [graph[u][v]['weight'] for u, v in graph.edges()]
         edge_colors = ['orange' if graph.nodes[u]['kind'] == 'solute' and graph.nodes[v]['kind'] == 'solute' else 'k'
@@ -251,33 +200,18 @@ def generate_overlap_graph(df, pc, n, directory, sign):
         interaction = df[pc].nlargest(n)
     else:
         interaction = df[pc].nsmallest(n)
-    # print(f'{sign} {n}\n')
-    # print(interaction)
-    # print('\n')
-    # sys.exit()
-    lip_dict = {'weight': 'bold', 'size': 22}
     fig = plt.figure(constrained_layout=True, figsize=(11.5, 5), dpi=150)
     gs = gridspec.GridSpec(nrows=1, ncols=2, figure=fig, left=0.00, bottom=0.00, right=0.64, top=None, wspace=None,
                            hspace=None, width_ratios=None, height_ratios=None)
     builder = GraphBuilder()
     graph, lipid_color, headgroup_bead = builder.build_graph(interaction, 'Nda')
-    # # ax1 = fig.add_subplot(221)
     ax1 = fig.add_subplot(gs[0])
     builder.draw_graph(graph, lipid_color, headgroup_bead, ax1)
-    # plt.title('CL', fontdict=lip_dict)
-    # ax2 = fig.add_subplot(222)
     graph, lipid_color, headgroup_bead = builder.build_graph(interaction, 'P4')
     ax2 = fig.add_subplot(gs[1])
     builder.draw_graph(graph, lipid_color, headgroup_bead, ax2)
-    # # plt.title('PG', fontdict=lip_dict)
-    # # ax3 = fig.add_subplot(223)
-    # ax3 = fig.add_subplot(gs[0])
-    # builder.draw_graph(large, 'Nda', ax3)
-    # # ax4 = fig.add_subplot(224)
-    # ax4 = fig.add_subplot(gs[1])
-    # builder.draw_graph(large, 'P4', ax4)
     sns.despine(left=True, bottom=True)
-    plt.suptitle(pc, fontsize=24)  # , weight='bold'
+    plt.suptitle(pc, fontsize=24)
     # plt.tight_layout(pad=0.0)
     path = directory / f'interactions_correlations_{pc}_{sign}.pdf'
     fig.savefig(path)
@@ -291,11 +225,7 @@ def process_data(df_path, pc, sign, number):
     df['beads'] = [tbi.split('-') for tbi in df.index.tolist()]
     unique = get_unique(df.index.tolist())
     df['groups'] = df['beads'].apply(get_group, args=(unique,))
-    # filtered_df = filter_df(df)
-    # filter_df.to_pickle(f'{df_path.parent}/{df_path.stem}_filtered.pickle')
-    generate_overlap_graph(df, pc, number, df_path.parent, sign)  # increase to ~ 50?
-    # subgraphs_small, subgraphs_large = generate_subgraphs(df, 'PC3', 15)
-    # generate_overlaps(subgraphs_small)
+    generate_overlap_graph(df, pc, number, df_path.parent, sign)
 
 
 if __name__ == '__main__':
