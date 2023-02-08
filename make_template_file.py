@@ -177,7 +177,6 @@ def make_templates():
         constraints[idx] = get_constraints(template)
 
     df = pd.DataFrame(constraints)
-    # print(df.loc[df['name'] == 'ROUND_2-molecule_17', 'constr'].item())
 
     df.to_pickle('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/constraint_templates.pickle')
 
