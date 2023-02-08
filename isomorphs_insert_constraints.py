@@ -1,11 +1,8 @@
-import argparse
-from pathlib import Path, PurePath
 import pandas as pd
-import pickle
+from pathlib import Path
 import regex as re
 import networkx as nx
-from networkx.algorithms import isomorphism
-import sys
+import pickle
 
 
 def clean_graph(graph):
@@ -13,82 +10,175 @@ def clean_graph(graph):
     return graph
 
 
-def find_isomorphs(templates, graph):
-    graph = clean_graph(graph)
-    for idx, template in templates.iterrows():
-        GM = isomorphism.GraphMatcher(template['graphs'], graph)
-        if GM.is_isomorphic():
-            return template
-
-
-def replace_mass(match):
-    match = '\n'.join(
-        [line.replace('45.0', '0.0') if line.startswith('1') or line.startswith('4') else line for line in match])
-    return match
-
-
-def replace_constraints(template, itp_path):
+def get_constraints(template):
     rgx = re.compile(r'(?<=\[bonds\]\n).*(?=\[ exclusions \])', re.DOTALL | re.MULTILINE)
-    nrexcl = re.compile(r'(MOL\s*)\d')
-    with open(itp_path, 'rt') as itp_file:
+    tab = re.compile(r'\s{4}|\s{3}')
+    with open(template['constr'], 'rt') as itp_file:
         itp = itp_file.read()
-        itp = re.sub(nrexcl, f"MOL\t{template['nrexcl']}", itp)
-        itp = re.sub(rgx, template['constr'], itp)
-        if template['name'] == 'ROUND_0-molecule_27':
-            mass = re.compile(r'(?<=\[atoms\]\n).*(?=\[bonds\])', re.DOTALL | re.MULTILINE)
-            match = re.search(mass, itp).group(0).split('\n')
-            match = replace_mass(match)
-            itp = re.sub(mass, match, itp)
+        match = re.search(rgx, itp).group(0)  # .split('\n')
+        match = tab.sub('\t', match)  # .strip()
+    template['constr'] = match
 
-    return itp
+    return template
 
 
-def get_itp(run_dirs, screen_round, molecule):
-    popg, cdl2 = None, None
-    for run_dir in run_dirs:
-        path = run_dir / screen_round
-        if path.is_dir():
-            mol_path = path / molecule
-            if mol_path.is_dir():
-                if 'CDL2' in path.parts:
-                    cdl2 = list(mol_path.glob(f'**/molecule_*.itp'))[0]
-                else:
-                    popg = list(mol_path.glob(f'**/molecule_*.itp'))[0]
-            else:
-                break
-        else:
-            break
+def make_templates():
+    g_0 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_0/graphs/round_0_kmeans.pkl', 'rb'))
+    g_1 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_1/graphs/graphs_round_1.pkl', 'rb'))
+    g_2 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_2/graphs/graphs_round_2.pkl', 'rb'))
+    g_3 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_3/graphs/graphs_round_3.pkl', 'rb'))
+    g_4 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_4/graphs/graphs_round_4.pkl', 'rb'))
+    g_5 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_5/graphs/graphs_round_5.pkl', 'rb'))
+    g_6 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_6/graphs/graphs_round_6.pkl', 'rb'))
+    g_7 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_7/graphs/graphs_round_7_reDo.pkl', 'rb'))
 
-    return popg, cdl2
+    template_graphs = [clean_graph(g_0[0]), clean_graph(g_0[1]), clean_graph(g_0[7]), clean_graph(g_0[8]),
+                       clean_graph(g_0[9]), clean_graph(g_0[14]), clean_graph(g_0[16]), clean_graph(g_0[17]),
+                       clean_graph(g_0[18]), clean_graph(g_0[26]), clean_graph(g_0[27]), clean_graph(g_0[50]),
+                       clean_graph(g_0[95]), clean_graph(g_1[0]), clean_graph(g_1[7]), clean_graph(g_1[11]),
+                       clean_graph(g_1[24]), clean_graph(g_1[26]), clean_graph(g_1[37]), clean_graph(g_1[40]),
+                       clean_graph(g_2[6]), clean_graph(g_2[17]), clean_graph(g_2[25]), clean_graph(g_2[28]),
+                       clean_graph(g_3[46]), clean_graph(g_4[39]), clean_graph(g_5[36]), clean_graph(g_5[37]),
+                       clean_graph(g_5[44]), clean_graph(g_6[20]), clean_graph(g_7[26])]
+
+    r0_mol0 = {'name': 'ROUND_0-molecule_00',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_00-79/molecule_00.itp')}
+    r0_mol1 = {'name': 'ROUND_0-molecule_01',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_01-39/molecule_01.itp')}
+    r0_mol7 = {'name': 'ROUND_0-molecule_07',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_07-79/molecule_07.itp')}
+    r0_mol8 = {'name': 'ROUND_0-molecule_08',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_08-79/molecule_08.itp')}
+    r0_mol9 = {'name': 'ROUND_0-molecule_09',
+               'nrexcl': '1',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_09-79/molecule_09.itp')}
+    r0_mol14 = {'name': 'ROUND_0-molecule_14',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_14-39/molecule_14.itp')}
+    r0_mol16 = {'name': 'ROUND_0-molecule_16',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_16-79/molecule_16.itp')}
+    r0_mol17 = {'name': 'ROUND_0-molecule_17',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_17-79/molecule_17.itp')}
+    r0_mol18 = {'name': 'ROUND_0-molecule_18',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/CDL2-molecule_18-39/molecule_18.itp')}
+    r0_mol26 = {'name': 'ROUND_0-molecule_26',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_26-79/molecule_26.itp')}
+    r0_mol27 = {'name': 'ROUND_0-molecule_27',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_27-79/molecule_27.itp')}
+    r0_mol50 = {'name': 'ROUND_0-molecule_50',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_50-39/molecule_50.itp')}
+    r0_mol95 = {'name': 'ROUND_0-molecule_95',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_0/POPG-molecule_95-39/molecule_95.itp')}
+    r1_mol0 = {'name': 'ROUND_1-molecule_00',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_00-79/molecule_00.itp')}
+    r1_mol7 = {'name': 'ROUND_1-molecule_07',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_07-39/molecule_07.itp')}
+    r1_mol11 = {'name': 'ROUND_1-molecule_11',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_11-79/molecule_11.itp')}
+    r1_mol24 = {'name': 'ROUND_1-molecule_24',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_24-39/molecule_24.itp')}
+    r1_mol26 = {'name': 'ROUND_1-molecule_26',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_26-79/molecule_26.itp')}
+    r1_mol37 = {'name': 'ROUND_1-molecule_37',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_37-79/molecule_37.itp')}
+    r1_mol40 = {'name': 'ROUND_1-molecule_40',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_1/CDL2-molecule_40-79/molecule_40.itp')}
+    r2_mol6 = {'name': 'ROUND_2-molecule_06',
+               'nrexcl': '2',
+               'constr': Path(
+                   '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_2/CDL2-molecule_06-39/molecule_06.itp')}
+    r2_mol17 = {'name': 'ROUND_2-molecule_17',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_2/CDL2-molecule_17-79/molecule_17.itp')}
+    r2_mol25 = {'name': 'ROUND_2-molecule_25',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_2/CDL2-molecule_25-39/molecule_25.itp')}
+    r2_mol28 = {'name': 'ROUND_2-molecule_28',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_2/CDL2-molecule_28-79/molecule_28.itp')}
+    r3_mol46 = {'name': 'ROUND_3-molecule_46',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_3/CDL2-molecule_46-79/molecule_46.itp')}
+    r4_mol39 = {'name': 'ROUND_4-molecule_39',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_4/POPG-molecule_39-39/molecule_39.itp')}
+    r5_mol36 = {'name': 'ROUND_5-molecule_36',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_5/CDL2-molecule_36-79/molecule_36.itp')}
+    r5_mol37 = {'name': 'ROUND_5-molecule_37',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_5/CDL2-molecule_37-79/molecule_37.itp')}
+    r5_mol44 = {'name': 'ROUND_5-molecule_44',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_5/CDL2-molecule_44-39/molecule_44.itp')}
+    r6_mol20 = {'name': 'ROUND_6-molecule_20',
+                'nrexcl': '2',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_6/CDL2-molecule_20-79/molecule_20.itp')}
+    r7_mol26 = {'name': 'ROUND_7-molecule_26',
+                'nrexcl': '1',
+                'constr': Path(
+                    '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_7/CDL2-molecule_26-39/molecule_26.itp')}
+
+    constraints = [r0_mol0, r0_mol1, r0_mol7, r0_mol8, r0_mol9, r0_mol14, r0_mol16, r0_mol17, r0_mol18, r0_mol26,
+                   r0_mol27,
+                   r0_mol50, r0_mol95, r1_mol0, r1_mol7, r1_mol11, r1_mol24, r1_mol26, r1_mol37, r1_mol40, r2_mol6,
+                   r2_mol17,
+                   r2_mol25, r2_mol28, r3_mol46, r4_mol39, r5_mol36, r5_mol37, r5_mol44, r6_mol20, r7_mol26]
+
+    for idx, template in enumerate(constraints):
+        template['graphs'] = template_graphs[idx]
+        constraints[idx] = get_constraints(template)
+
+    df = pd.DataFrame(constraints)
+
+    df.to_pickle('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/constraint_templates.pickle')
 
 
-def process_molgraphs(dataframe, graphs, run_dirs):
-    df = pd.read_pickle(dataframe)
-
-    for graph_round in sorted(graphs.glob('ROUND_*')):
-        screen_round = graph_round.name
-        graphs = [graphs for graphs in graph_round.glob('**/*.pkl')][0]
-        graphs = pickle.load(open(graphs, 'rb'))
-        for idx, graph in enumerate(graphs):
-            molecule = f'molecule_{str(idx).zfill(2)}'
-            # get_itp(run_dirs, screen_round, molecule)
-            pg_itp, cl_itp = get_itp(run_dirs, screen_round, molecule)
-            if pg_itp is not None and cl_itp is not None:
-                template = find_isomorphs(df, graph)
-                new_topology = replace_constraints(template, pg_itp)
-                pg_itp.write_text(new_topology)
-                cl_itp.write_text(new_topology)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Find isomorphs to example graphs, identify mapped node indices, adjust '
-                                     'constraints and update topology file.')
-    parser.add_argument('-df', '--dataframe', type=Path, required=True,
-                        help='Pandas Dataframe with example graphs as networkx object and relevant bonds, constraints, '
-                             'angles, virtual sites or dihedrals.')
-    parser.add_argument('-g', '--graphs', type=Path, required=True, help='Pkl files with graphs as networkx objects.')
-    parser.add_argument('-itp', '--topology', type=Path, nargs='+', required=True,
-                        help='Path to base directory with run input files. CL first, PG second.')
-    args = parser.parse_args()
-    
-    process_molgraphs(args.dataframe, args.graphs, args.topology)
+make_templates()
