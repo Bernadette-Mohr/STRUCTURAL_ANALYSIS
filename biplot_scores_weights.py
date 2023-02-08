@@ -1,5 +1,4 @@
 import argparse
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -7,7 +6,6 @@ import pandas as pd
 import itertools
 
 from matplotlib.offsetbox import AnnotationBbox
-from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib import colors
@@ -19,23 +17,6 @@ from plot_cross_correlations import style_label
 
 sns.set(style='whitegrid', palette='deep')
 sns.set_context(context='paper', font_scale=1.8)
-
-
-# cmap = sns.color_palette('bwr')
-
-
-def kmeans_cluster(pca_df, n_components, n_clusters):
-    X = pca_df.loc[:, [i for i in range(n_components)]]  # [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-    KM = KMeans(n_clusters, n_init=50, max_iter=500, random_state=42)
-    XKM = KM.fit_transform(X)
-    # print(KM.n_features_in_)
-    df_km = pd.DataFrame(X)
-    df_km['cluster'] = (KM.labels_ + 1).astype(str)
-    df_km['selec'] = pca_df['selec'].tolist()
-    df_km['sol'] = pca_df['sol'].tolist()
-
-    return df_km
 
 
 def get_weights(coeffs, x, y, bead):
@@ -50,10 +31,7 @@ def get_weights(coeffs, x, y, bead):
         x_head_pos = x_head.nlargest(20)
         x_head_neg = x_head.nsmallest(20)
         x_head = x_head_pos.combine_first(x_head_neg)
-        # y_head_pos = y_head.nlargest(3)
-        # y_head_neg = y_head.nsmallest(3)
         y_head = y_head[x_head.index]
-        # print(x_head, '\n', y_head)
 
     lipid_head = pd.concat({f'PC{x + 1}': x_head, f'PC{y + 1}': y_head}, axis=1)
     return lipid_head
@@ -65,11 +43,11 @@ def get_largest(coeffs, x, y, n, interaction):
     x_head = x_head.astype(float)
     y_head = y_head.astype(float)
     if len(x_head.index) <= n:
-        print('foo')
+        # print('foo')
         x_head = x_head
         y_head = y_head
     elif interaction == 'three-body':
-        print('bar')
+        # print('bar')
         x_head_pos = x_head.nlargest(n)
         x_head_neg = x_head.nsmallest(n)
         x_head_xtmp = x_head_pos.combine_first(x_head_neg)
@@ -81,14 +59,11 @@ def get_largest(coeffs, x, y, n, interaction):
         x_head = x_head_xtmp.combine_first(x_head_ytmp)
         y_head = y_head.combine_first(y_head_tmp)
     else:
-        print('baz')
+        # print('baz')
         x_head_pos = x_head.nlargest(n)
         x_head_neg = x_head.nsmallest(n)
         x_head = x_head_pos.combine_first(x_head_neg)
-        # y_head_pos = y_head.nlargest(3)
-        # y_head_neg = y_head.nsmallest(3)
         y_head = y_head[x_head.index]
-        # print(x_head, '\n', y_head)
 
     lipid_head = pd.concat({f'PC{x + 1}': x_head, f'PC{y + 1}': y_head}, axis=1)
     return lipid_head
@@ -154,12 +129,7 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
             else:
                 x_idx = 4
                 y_idx = idx - 16
-            # if idx <= 4:
-            #     x_idx = 0
-            #     y_idx = idx
-            # else:
-            #     x_idx = 1
-            #     y_idx = idx - 5
+
             xs = scores[x]
             ys = scores[y]
             scalex = 1.0 / (xs.max() - xs.min())
@@ -175,23 +145,16 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                                 ax=ax, cmap=cmap)
             ax.set_xlabel(x_pc, fontsize=18)
             ax.set_ylabel(y_pc, fontsize=18)
-            # cl_head = get_weights(coeffs, x, y, 'Nda')
-            # pg_head = get_weights(coeffs, x, y, 'P4')
             if interaction == 'three-body':
                 biggest = get_largest(coeffs, x, y, 1, interaction)
             else:
                 biggest = get_largest(coeffs, x, y, 3, interaction)
             for n_body in biggest.index:
-                # for cl_n_body, pg_n_body in zip(cl_head.index, pg_head.index):
                 plt.arrow(0, 0, biggest.loc[n_body, x_pc] * scaler[0], biggest.loc[n_body, y_pc] * scaler[0],
                           color='k', alpha=0.9)
                 plt.text(biggest.loc[n_body, x_pc] * scaler[1], biggest.loc[n_body, y_pc] * scaler[1],
                          n_body, color='k', weight='bold', ha='center', va='center', fontsize=14,
                          bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
-                # plt.arrow(0, 0, pg_head.loc[pg_n_body, x_pc] * 1, pg_head.loc[pg_n_body, y_pc] * 1, color='b',
-                #           alpha=0.9)
-                # plt.text(pg_head.loc[pg_n_body, x_pc] * 1.15, pg_head.loc[pg_n_body, y_pc] * 1.15,
-                #          pg_n_body, color='b', weight='bold', ha='center', va='center')
             ax.set_aspect('equal', 'box')
         else:
             desc_label = style_label(descriptor)
@@ -222,7 +185,6 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
         ax.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], linestyle='dashed', color='gray')
-        # ax.plot([0, 1], [1, 0], transform=ax.transAxes)
         ax.set_xlabel(x_pc, fontsize=18)
         ax.set_ylabel(y_pc, fontsize=18)
 
@@ -268,7 +230,6 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
             else:
                 biggest = get_largest(coeffs, x, y, 3, interaction)
             for n_body in biggest.index:
-                # for cl_n_body, pg_n_body in zip(cl_head.index, pg_head.index):
                 plt.arrow(0, 0, biggest.loc[n_body, x_pc] * scaler[0], biggest.loc[n_body, y_pc] * scaler[0],
                           color='k', alpha=0.9)
                 plt.text(biggest.loc[n_body, x_pc] * scaler[1], biggest.loc[n_body, y_pc] * scaler[1],
@@ -301,19 +262,14 @@ def load_data(directory, scores, coefficients, labels, interaction, descriptor, 
         ts_path = None
     n_one_body = len([idx for idx in coefficients.index if '-' not in idx])
     n_two_body = len([idx for idx in coefficients.index if len(idx.split('-')) == 2])
-    # print(n_one_body, n_two_body)
     if interaction == 'two-body':
         coeffs = coefficients.iloc[n_one_body:n_two_body]
         scaler = [1.0, 1.15]
-        # coeffs = coefficients.iloc[0:n_two_body]
     else:
         coeffs = coefficients.iloc[n_one_body + n_two_body:]
         scaler = [1.0, 1.15]
     coeffs = coeffs[~(coeffs == 0.0).all(axis=1)]
-    # # Add KMeans clustering labels to scores df
-    # if kmeans:
-    #     scores = kmeans_cluster(scores, 5, 6)
-    #     scores.to_pickle(f'{directory}/wghtd_avg_PCA_kmeans.pickle')
+
     plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, directory, images, pc, ts_path)
 
 
@@ -323,14 +279,10 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--scores', type=Path, required=True, help='Path to dataframe with principal components')
     parser.add_argument('-c', '--coefficients', type=Path, required=True, help='Path to dataframe with pca weights.')
     parser.add_argument('-l', '--labels', type=Path, required=True, help='Path to dataframe with solute labels.')
-    # parser.add_argument('-fn', '--filename', type=str, required=False, default='biplot_test',
-    #                     help='name for generated plot')
     parser.add_argument('-ia', '--interaction', type=str, required=True, choices=['two-body', 'three-body'],
                         help='Select interaction type to plot')
     parser.add_argument('-desc', '--descriptor', type=str, required=False, default='cluster',
                         help='Descriptor for coloring the PCA plots.')
-    # parser.add_argument('--kmeans', action='store_true', required=False,
-    #                     help='True or False: Should Kmeans clustering be performed for coloring the PCA plots?')
     parser.add_argument('-pcs', '--principals', type=str, nargs=2, required=False, default=None,
                         help='Principal components, if only a single plot is to be generated.')
     parser.add_argument('-ts', '--test_scores', type=Path, required=False,
@@ -339,7 +291,9 @@ if __name__ == '__main__':
                         help='Paths to svg files with graph images for inserting images instead of solute labels.')
 
     # -ts weighted_average_PCA_6PCs_test-data.pickle
-    # -ims /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_6_molecule_48.svg /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_7_molecule_34.svg /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_7_molecule_56.svg
+    # -ims /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_6_molecule_48.svg
+    # /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_7_molecule_34.svg
+    # /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_7_molecule_56.svg
 
     args = parser.parse_args()
     load_data(args.directory, args.scores, args.coefficients, args.labels, args.interaction, args.descriptor,
