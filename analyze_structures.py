@@ -1,19 +1,18 @@
 # general python modules
-import sys
 import gc
 import argparse
 from pathlib import Path
 import pickle
 import pandas as pd
-# import dask.dataframe as dd
 import numpy as np
 import warnings
+from tqdm import tqdm
 import regex as re
-
-import MDAnalysis as mda
+# MDAnalysis tools, custom modules
 import preprocessing
 import generate_representations
 import clean_trajectories
+import MDAnalysis as mda
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
@@ -35,7 +34,6 @@ def get_atom_features(itp_list):
     compound_list = list()
     for itp in itp_list:
         itp = itp
-        # TODO: make atom_features_df key-value pair, "Round_x-moleucule_y": atom list. To keep info on solute identity.
         types_dict = generate_representations.get_atom_features(itp, 'charge')
         compound_list.append(types_dict)
 
@@ -47,7 +45,8 @@ def get_atom_features(itp_list):
 def get_test_dir(run_dir):
     dir_list = list(run_dir.parts)
     if 'CDL2' not in dir_list:
-        dir_list[dir_list.index('POPG')] = 'CDL2'
+        # dir_list[dir_list.index('POPG')] = 'CDL2'
+        dir_list = [part.replace('POPG', 'CDL2') if 'POPG' in part else part for part in dir_list]
         test_dir = Path('').joinpath(*dir_list)
     else:
         test_dir = run_dir
@@ -56,23 +55,23 @@ def get_test_dir(run_dir):
 
 
 def chunks(list_, n):
-    """Yield n number of sequential chunks from l."""
-    d, r = divmod(len(list_), n)
-    for i in range(n):
-        si = (d+1)*(i if i < r else r) + d*(0 if i < r else i - r)
-        yield list_[si:si+(d+1 if i < r else d)]
+    """Yield n number of sequential chunks from a list."""
+    quotient, remainder = divmod(len(list_), n)
+    for idx in range(n):
+        si = (quotient+1)*(idx if idx < remainder else remainder) + quotient*(0 if idx < remainder else idx - remainder)
+        yield list_[si:si + (quotient + 1 if idx < remainder else quotient)]
 
 
-def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtypes=None, compounds=None, slatms=None):
+def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtypes=None):
     tpr = re.compile(r'prod-(79|39).tpr$')
     xtc = re.compile(r'prod-(79|39).xtc$')
-    if len([str(path) for path in list(cdl2_results.rglob('ROUND_*/molecule_*/**/*')) if re.search(tpr, path.name)]) - \
-            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) > 1:
+    if len([str(path) for path in list(cdl2_results.rglob('ROUND_*/molecule_*/**/*')) if re.search(xtc, path.name)]) - \
+            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) > 5:
         print('Cleaning up trajectory...')
-        for cl_round_mols, pg_round_mols in zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False),
-                                                sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)):
+        for cl_round_mols, pg_round_mols in tqdm(zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False), 
+                                                     sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)),
+                                                 position=2, desc='Molecules', leave=False, ncols=80):
             molecule = cl_round_mols.parts[-1]
-            print(molecule)
             state1_dirs = [
                 sorted([path for path in cl_round_mols.glob('*-molecule_*-*') if 'tar.gz' not in path.name])[-1],
                 sorted([path for path in pg_round_mols.glob('*-molecule_*-*') if 'tar.gz' not in path.name])[-1]]
@@ -81,15 +80,16 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                 continue
             else:
                 for lipid_path in state1_dirs:
-                    path = lipid_path / f'prod-{molecule}'
-                    clean = clean_trajectories.PrepareTrajectory([str(path) for path in lipid_path.rglob('*')
-                                                                  if re.match(tpr, path.name)][0],
-                                                                 [str(path) for path in lipid_path.rglob('*')
-                                                                  if re.match(xtc, path.name)][0])
-                    clean.clean_and_crop(path)
-                    del clean
-                    gc.collect()
-        sys.exit()
+                    if not Path(f'{lipid_path}/prod-{molecule}.xtc').is_file() or not Path(
+                            f'{lipid_path}/prod-{molecule}.gro').is_file():
+                        path = lipid_path / f'prod-{molecule}'
+                        clean = clean_trajectories.PrepareTrajectory([str(path) for path in lipid_path.rglob('*')
+                                                                      if re.match(tpr, path.name)][0],
+                                                                     [str(path) for path in lipid_path.rglob('*')
+                                                                      if re.match(xtc, path.name)][0])
+                        clean.clean_and_crop(path)
+                        del clean
+                        gc.collect()
 
     if not mbtypes:
         print('Generating mbtypes...')
@@ -101,96 +101,70 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
             pickle.dump(results, handle, protocol=pickle.HIGHEST_PROTOCOL)
         cmp_path = cdl2_results.parent / 'bead-types_per_compound.pickle'
         compounds.to_pickle(cmp_path)
+
     else:
         with open(mbtypes, 'rb') as infile:
             results = pickle.load(infile)
-        compounds = pd.read_pickle(compounds)
 
-    if not slatms:
-        print('Generating SLATM representations...')
-        # tqdm([cdl2_results, popg_results], position=0, desc='Lipid', leave=False, ncols=80):
-        for lipid_path in [cdl2_results, popg_results]:
-            lipid = lipid_path.parts[-1]
-            # tqdm(sorted(lipid_path.glob('ROUND_*')), position=1, desc='Round', leave=False, ncols=80):
+    print('Generating SLATM representations...')
+    for lipid_path in [cdl2_results, popg_results]:
+        lipid = lipid_path.parts[-1]
+        if batch_file:
+            df_path = cdl2_results.parent / f'SLATMS-{lipid}-batch_{batch}.pickle'
+        else:
+            df_path = cdl2_results.parent / f'SLATMS-{lipid}.pickle'
+        if not df_path.is_file():
+            slatms_df = pd.DataFrame(columns=['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5'])
             for rnd_path in sorted(lipid_path.glob('ROUND_*')):
                 round_ = rnd_path.parts[-1]
+                print(round_)
                 if batch_file:
                     df = pd.read_pickle(batch_file)
                     solutes = [Path(f'{rnd_path}/{mol}') for mol in
-                               df.loc[(df['batches'] == f'batch_{batch}') & (df['rounds'] == round_)]['molecules'].tolist()]
+                               df.loc[(df['batches'] == f'batch_{batch}') &
+                                      (df['rounds'] == round_)]['molecules'].tolist()]
                 else:
-                    solutes = sorted(rnd_path.glob('molecule_*'))
-                # tqdm(enumerate(chunks(sorted(rnd_path.glob('molecule_*')), 6)), position=2, desc='Molecule Chunks',
-                # leave=False, ncols=80):
-                for chunk_idx, chunk in enumerate(chunks(solutes, len(solutes))):
-                    slatms_df = pd.DataFrame(columns=['solutes', 'SLATMS', 'means'])
-                    for mol in chunk:
-                        molecule = mol.parts[-1]
-                        run_dir = list(mol.rglob('*'))[0]
-                        test_dir = get_test_dir(run_dir)
+                    solutes = list(sorted(rnd_path.glob('molecule_*')))
 
-                        if not Path(f'{test_dir}/prod-79.xtc').is_file() and not Path(
-                                f'{test_dir}/prod-39.xtc').is_file():
-                            # continue
-                            print('This is a dummy call for debugging purposes')
-                        else:
-                            if not Path(f'{run_dir}/prod-{molecule}.xtc').is_file() or \
-                                    not Path(f'{run_dir}/prod-{molecule}.gro'):
-                                print('Cleaning up trajectory...')
-                                path = run_dir / f'prod-{molecule}'
-                                clean = clean_trajectories.PrepareTrajectory(
-                                    [str(path) for path in lipid_path.rglob('*')
-                                     if re.match(tpr, path.name)][0],
-                                    [str(path) for path in lipid_path.rglob('*')
-                                     if re.match(xtc, path.name)][0])
-                                clean.clean_and_crop(path)
-                                del clean
-                                gc.collect()
+                for mol in solutes:
+                    molecule = mol.parts[-1]
+                    print(molecule)
+                    run_dir = list(mol.rglob('*'))[0]
+                    test_dir = get_test_dir(run_dir)
 
-                        pre = preprocessing.PreprocessPipeline(f'{run_dir}/prod-{molecule}.tpr',
-                                                               f'{run_dir}/prod-{molecule}.xtc')
-                        sel_atoms, _, sel_positions, _ = pre.preprocess_sim_data()
-                        rep = generate_representations.GenerateRepresentation(results['mapping'], results['charges'],
-                                                                              results['mbtypes'])
-                        beads = compounds.loc[(compounds['round'] == round_) & (compounds['molecule'] == molecule),
-                                              'types'].item()
+                    if not Path(f'{test_dir}/prod-79.xtc').is_file() and \
+                            not Path(f'{test_dir}/prod-39.xtc').is_file():
+                        print('oops')
+                        continue
+                    else:
+                        if not Path(f'{run_dir}/prod-{molecule}.xtc').is_file() or \
+                                not Path(f'{run_dir}/prod-{molecule}.gro'):
+                            print('Cleaning up trajectory...')
+                            path = run_dir / f'prod-{molecule}'
+                            clean = clean_trajectories.PrepareTrajectory(
+                                [str(path) for path in lipid_path.rglob('*') if re.match(tpr, path.name)][0],
+                                [str(path) for path in lipid_path.rglob('*') if re.match(xtc, path.name)][0])
+                            clean.clean_and_crop(path)
+                            del clean
+                            gc.collect()
 
-                        slatms, means = rep.make_representation(sel_atoms, sel_positions, beads)
-                        df_idx = len(slatms_df.index)
-                        slatms_df.loc[df_idx, ['solutes', 'SLATMS', 'means']] = [molecule, slatms, means]
+                    pre = preprocessing.PreprocessPipeline(f'{run_dir}/prod-{molecule}.tpr',
+                                                           f'{run_dir}/prod-{molecule}.xtc')
+                    sel_atoms, sel_positions = pre.preprocess_sim_data()
+                    rep = generate_representations.GenerateRepresentation(results['mapping'], results['charges'],
+                                                                          results['mbtypes'])
+                    means = rep.make_representation(sel_atoms, sel_positions)
+                    df_idx = len(slatms_df.index)
+                    slatms_df.loc[df_idx, ['round', 'solute']] = round_, molecule
+                    slatms_df.loc[df_idx, ['bead1', 'bead2', 'bead3', 'bead4', 'bead5']] = means
 
-                        del rep, pre
-                        gc.collect()
-
-                    df_path = cdl2_results.parent / f'SLATMS-{lipid}-{round_}-molecule_{chunk_idx}.pickle'
-                    slatms_df.to_pickle(df_path)
-
-                    del slatms_df
+                    del rep, pre
                     gc.collect()
-                    sys.exit()
-        sys.exit()
 
-    for cl_round_mols, pg_round_mols in zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False),
-                                            sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)):
-        molecule = cl_round_mols.parts[-1]
-        state1_dirs = [sorted([path for path in cl_round_mols.glob('*-molecule_*-*') if 'tar.gz' not in path.name])[-1],
-                       sorted([path for path in pg_round_mols.glob('*-molecule_*-*') if 'tar.gz' not in path.name])[-1]]
-        if not Path(f'{state1_dirs[0]}/prod-79.xtc').is_file() and not Path(f'{state1_dirs[0]}/prod-39.xtc').is_file():
-            continue
-        else:
-            """
-             TODO
-            """
-            for lipid_path in state1_dirs:
-                print(lipid_path)
+            slatms_df.to_pickle(df_path)
 
-                pre = preprocessing.PreprocessPipeline(str(list(lipid_path.glob(f'prod-{molecule}.gro'))[0]),
-                                                       str(list(lipid_path.glob(f'prod-{molecule}.xtc'))[0]))
-                sel_atoms, mol_atoms, sel_positions, mol_positions = pre.preprocess_sim_data()
-
-                # TODO
-                del pre
-                gc.collect()
+            del slatms_df
+            gc.collect()
 
 
 if __name__ == '__main__':
@@ -202,20 +176,13 @@ if __name__ == '__main__':
     parser.add_argument('-b', '--batch', type=str, required=False, default=str(0),
                         help='Number of rerun batch to be processed.')
     parser.add_argument('-mbt', '--mbtypes', type=Path, required=False,
-                        help='OPTIONAL: Pickled dictionary containing lists:\n'
-                             'Key: \'mbtypes\' - all multi-body interactions in the whole data set.\n'
+                        help='OPTIONAL: Pickled dictionary containing lists:\n '
+                             'Key: \'mbtypes\' - all multi-body interactions in the whole data set.\n '
                              'Key: \'charges\' - dictionary containing mock charges that act as unique identifiers for '
-                             'the individual bead types.\n'
+                             'the individual bead.\n'
                              'Key: \'mapping\' - dictionary containing bead-type to bead-type pairs for renaming '
                              'Gromacs-types and S-types to regular Martini or T-beads.')
-    parser.add_argument('-cmp', '--compounds', type=Path, required=False,
-                        help='OPTIONAL: Pandas dataframe with columns [\'rounds\', \'molecules\', \'types\'] '
-                             'containing list [solute bead types] per molecule and round.')
-    parser.add_argument('-slatms', type=Path, required=False,
-                        help='OPTIONAL: Pandas dataframe with SLATM representations of all systems.\n'
-                             'columns: \'rounds\', \'mols\', \'lipids\', \'SLATMS\'.\n '
-                             'SLATMs will be generated if not provided.')
 
     args = parser.parse_args()
 
-    process_data(args.clp, args.pgp, args.batch_file, args.batch, args.mbtypes, args.compounds)
+    process_data(args.clp, args.pgp, args.batch_file, args.batch, args.mbtypes)
