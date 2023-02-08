@@ -18,13 +18,13 @@ def style_label(label):
         label = f'{label.capitalize()} {deltaG} [kcal/mol]'
     elif label == 'distance':
         norm = r"$L_2\mathrm{-norm}$"
-        label = f'Difference ({norm})'
+        label = f'{norm}'
     elif label == 'hydrophobicity':
         dG_WOl = r"$\Delta G_{\mathrm{W}\rightarrow\mathrm{Ol}}$"
         label = f'average {dG_WOl} [kcal/mol]'
         # label = f'{label.capitalize()} {dG_w_ol}'
     elif label == 'h_bonds':
-        label = f'avg. # hydrogen bonds'
+        label = f'avg. # H-bonds'
     elif label == 'polarity':
         label = f'avg. # polar beads'
     else:
