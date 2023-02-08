@@ -25,14 +25,12 @@ def find_duplicate_positions(universe, selection):
 
 def calculate_ld(solute, filter_):
     """
-     Use mass density of the solute along the z coordinate to select the n frames where the COM of the solute is closest
-     to the center of the bin with the highest density of the solute over the whole trajectory.
-     Bin size: 0.1 Å
+     Use mass density of the solute along the z coordinate to select the n frames where the COM of the solute 
+     is closest to the center of the bin with the highest occupation of the solute over the whole trajectory.
+     Binsize: 0.1 Å
     """
     ldens = LinearDensity(select=solute, grouping='fragments', binsize=0.1, verbose=True)
     ldens.run()
-    # mass_density, bin_edges, dimension
-    # ldens.results.z.mass_density, ldens.results.z.hist_bin_edges, ldens.nbins
     left = ldens.results.z.hist_bin_edges[ldens.results.z.mass_density.argmax(axis=0)]
     right = ldens.results.z.hist_bin_edges[ldens.results.z.mass_density.argmax(axis=0) + 1]
     center = left + (right - left) / 2
@@ -67,14 +65,20 @@ class PrepareTrajectory:
         universe.trajectory.add_transformations(*workflow)
 
         solute = universe.select_atoms('(resname MOL or around 11 resname MOL) and '
-                                    'not (name WP or name WM or name NAP or name NAM)', updating=True)
+                                       'not (name WP or name WM or name NAP or name NAM)', updating=True)
 
-        # bools: list with boolean values indicating wether the frame at the corresponding timestep should be kept.
+        """
+         bools: list with boolean values indicating whether the frame at the corresponding timestep should be kept.
+        """
         bools = find_duplicate_positions(universe, solute)
-        # Trajectory minus the frames containing indentical particle positions.
+        """
+         Trajectory minus the frames containing indentical particle positions.
+        """
         filter_ = universe.trajectory[bools]
-        # # Reduce length of trajectory to 200 evenly spaced frames.
-        # short_traj = filter_[np.round(np.linspace(0, len(filter_) - 1, 200)).astype(int)]
+
+        """
+         Select n frames with solute COM in area of highest occupation probability.
+        """
         short_traj = calculate_ld(solute, filter_)
 
         with mda.Writer(f'{filename}.xtc', n_atoms=universe.atoms.n_atoms) as xtc:
