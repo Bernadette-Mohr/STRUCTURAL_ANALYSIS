@@ -2,17 +2,17 @@
 import numpy as np
 import pandas as pd
 import regex as re
-# SLATM tools, analysis
+import tqdm
+# SLATM tools
 import qml
 
 
-def get_atom_features(itp, col):
+def get_atom_features(itp):
     """
         Return dataframe with info about residue structure in itp file.
         Only works for first molecule entry in itp file.
 
         itp (str): path to .itp file.
-        col (str): name of one of the columns to detect where to start aggregating data.
         """
     rgx = re.compile(r'(?<=\[atoms\]\n).*(?=\[bonds\])', re.DOTALL | re.MULTILINE)
     molecule = itp.stem
@@ -81,22 +81,26 @@ def make_mbtypes(compounds):
                     'Q0': 'Q0',
                     'T2': 'T2',
                     'T5': 'T5'}
-    PG_beads = {'round': 'ALL', 'molecule': 'POPG', 'types': ['GL0P', 'PO4', 'GL1', 'GL2', 'C1A', 'D2A',
+    PG_beads = {'round': 'ALL', 'molecule': 'POPG', 'types': ['GL0P', 'PO4', 'GL1', 'GL2', 'C1A', 'D2A', 
                                                               'C3A', 'C4A', 'C1B', 'C2B', 'C3B', 'C4B']}
-    CL_beads = {'round': 'ALL', 'molecule': 'CDL2', 'types': ['GL0C', 'PO41', 'GL11', 'GL21', 'C1A1', 'C2A1',
-                                                              'D3A1', 'C4A1', 'C5A1', 'C1B1', 'C2B1', 'D3B1',
-                                                              'C4B1', 'C5B1', 'PO42', 'GL21', 'GL22', 'C1A2',
-                                                              'C2A2', 'D3A2', 'C4A2', 'C5A2', 'C1B2', 'C2B2',
+    CL_beads = {'round': 'ALL', 'molecule': 'CDL2', 'types': ['GL0C', 'PO41', 'GL11', 'GL21', 'C1A1', 'C2A1', 
+                                                              'D3A1', 'C4A1', 'C5A1', 'C1B1', 'C2B1', 'D3B1', 
+                                                              'C4B1', 'C5B1', 'PO42', 'GL21', 'GL22', 'C1A2', 
+                                                              'C2A2', 'D3A2', 'C4A2', 'C5A2', 'C1B2', 'C2B2', 
                                                               'D3B2', 'C4B2', 'C5B2']}
     NA_beads = {'round': 'ALL', 'molecule': 'SODIUM', 'types': ['NAC']}
     W_beads = {'round': 'ALL', 'molecule': 'WATER', 'types': ['W']}
     rows = [PG_beads, CL_beads, NA_beads, W_beads]
     new_df = pd.DataFrame.from_dict(rows, orient='columns')
-    # Generating "charges" for each type (they function as unique identifiers)
+    """
+     Generating "charges" for each type (they function as unique identifiers)
+    """
     charges_list = set(mapping_dict.values())
     charges_dict = {k: i for i, k in enumerate(charges_list, start=1)}
     compounds = pd.concat([compounds, new_df], ignore_index=True)
-    # Generating many-body types
+    """
+     Generating many-body types
+    """
     charges_per_compound = [[charges_dict[mapping_dict[bead]] for bead in compound] for compound in
                             compounds['types'].tolist()]
     mbtypes = qml.representations.get_slatm_mbtypes(charges_per_compound)
@@ -143,28 +147,24 @@ class GenerateRepresentation:
             type_at = self.mapping_dict.get(name, "?")
             charges.append(self.charges_dict.get(type_at, "?"))
 
-        # if "?" in charges:
-        #     print(sub_sel, '\n')
-
         return charges
 
-    def make_representation(self, atoms, positions) -> list:
+    def make_representation(self, atoms, positions) -> object:
         """
         For each frame, generates slatm representation.
-        :rtype: list
+        :rtype: object
         """
         rep_frames = []
-        for idx, (at_frame, pos_frame) in enumerate(zip(atoms, positions)):
+        for idx, (at_frame, pos_frame) in enumerate(tqdm.tqdm(zip(atoms, positions), total=len(atoms), desc='Frames',
+                                                              leave=True)):
             charges_arr = self.get_charges(at_frame)
-            # rep_frame = qml.representations.generate_slatm(pos_frame, charges_arr, self.mbtypes,
-            #                                                local=True, sigmas=[0.3, .2], dgrids=[.2, .2], rcut=8.,
-            #                                                rpower=6)
             rep_frame = qml.representations.generate_slatm(pos_frame, charges_arr, self.mbtypes,
-                                                           local=True, sigmas=[.3, .2], dgrids=[.1, .1], rcut=8.,
+                                                           local=True, sigmas=[0.3, .2], dgrids=[.2, .2], rcut=8.,
                                                            rpower=6)
 
             rep_frames.append(rep_frame)
 
+        print('Calculate configurational average...')
         solute = atoms[0].select_atoms('resname MOL')
         means = []
         for bead in solute:
