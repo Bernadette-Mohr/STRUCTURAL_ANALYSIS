@@ -421,9 +421,10 @@ def preprocess_slatms(df, interactions, interactions_short, path, plotting):
     return processed_slatms
 
 
-def main(path, deltaGs, mbtypes, environments, dG_w_ol, beadTypes, test=None, plotting=False):
+def main(path, deltaGs, mbtypes, environments, n_components, dG_w_ol, beadTypes, plotting, update, test=None):
     slatm_path = path / 'SLATMS'
     df, mbtypes, charges, mapping = load_data(slatm_path, environments, deltaGs, mbtypes, test=test)
+
     # extract interactions represented by individual SLATM bins.
     interactions = get_interactions(mbtypes, charges)
     interactions_short = list()
@@ -438,28 +439,34 @@ def main(path, deltaGs, mbtypes, environments, dG_w_ol, beadTypes, test=None, pl
         avg_slatms = pd.read_pickle(train_path)
     except FileNotFoundError:
         avg_slatms = preprocess_slatms(df, interactions, interactions_short, train_path, plotting)
-    n_components = 6
+
     if test is None:
-        (pc_df,
-         explained_variance,
-         explained_variance_ratio,
-         components) = calculate_PCA(avg_slatms, selectivities=df[['round', 'solute', 'DeltaDeltaG']],
-                                     n_components=n_components)
+        if update:
+            (pc_df,
+             explained_variance,
+             explained_variance_ratio,
+             components) = calculate_PCA(avg_slatms, selectivities=df[['round', 'solute', 'DeltaDeltaG']],
+                                         n_components=n_components)
         if plotting:
             plot_exp_variance_ratio(path, pc_df, explained_variance_ratio, n_components)
             plot_pca(path, pc_df)
             plot_scree_plot(path, explained_variance_ratio, n_components)
-        pc_df.to_pickle(f'{path}/weighted_average_PCA_{str(n_components)}PCs.pickle')
+        if update:
+            pc_df.to_pickle(f'{path}/weighted_average_PCA_{str(n_components)}PCs.pickle')
+
         loadings = components.T * np.sqrt(explained_variance)
+
         loading_matrix = pd.DataFrame(loadings, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
                                       index=interactions_short)
         component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
                                         index=interactions_short)
-        component_matrix.to_pickle(f'{path}/weights_matrix_{str(n_components)}PCs.pickle')
-        # n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
-        # loading_matrix = loading_matrix.iloc[n_one_body:]
+
         loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
-        loading_matrix.to_pickle(f'{path}/loading_matrix_{str(n_components)}PCs.pickle')
+
+        if update:
+            component_matrix.to_pickle(f'{path}/weights_matrix_{str(n_components)}PCs.pickle')
+            loading_matrix.to_pickle(f'{path}/loading_matrix_{str(n_components)}PCs.pickle')
+
         # select only interactions that contain at least one of a list of specific bead types
         selection = beadTypes
         if plotting:
@@ -469,7 +476,7 @@ def main(path, deltaGs, mbtypes, environments, dG_w_ol, beadTypes, test=None, pl
         test_df, _, _, _ = load_data(slatm_path, test=test)
         columns = test_df[['round', 'solute']]
         test_path = path / 'weighted_avg_log_norm_difference_SLATMs_test-data.pickle'
-        # test_path = ''
+
         try:
             test_slatms = pd.read_pickle(test_path)
         except FileNotFoundError:
@@ -487,21 +494,16 @@ def main(path, deltaGs, mbtypes, environments, dG_w_ol, beadTypes, test=None, pl
         component_matrix = pd.DataFrame(components.T, columns=[f'PC{str(idx + 1)}' for idx in range(n_components)],
                                         index=interactions_short)
         component_matrix.to_pickle(f'{path}/weights_matrix_{str(n_components)}PCs_test-data.pickle')
-        # n_one_body = len([idx for idx in loading_matrix.index if '-' not in idx])
-        # loading_matrix = loading_matrix.iloc[n_one_body:]
-        # # drop interactions that have a coefficient of zero in all principal components (not present in any sample)
-        # loading_matrix = loading_matrix[~(loading_matrix == 0.0).all(axis=1)]
+
         loading_matrix['hydrophobicity'] = average_partitioningFE(loading_matrix.index, dg_w_ol)
         loading_matrix.to_pickle(f'{path}/loading_matrix_{str(n_components)}PCs_test-data.pickle')
-
-    # TODO: df[df.selec == df.selec.min()], df[df.selec == df.selec.max()], df.iloc[df.selec.sub(0.0).abs().idxmin()]
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Analyze SLATM representations of MD-Trajectories. '
                                      'Optional: make predictions on test data.')
     parser.add_argument('-dir', '--directory', type=Path, required=True,
-                        help='Path to base directory for saving results. Needs subdirectory \'SLATMS\' with SLATM '
+                        help='Path to base directory for saving results. Expects a subdirectory \'SLATMS\' with SLATM '
                              'representations.')
     parser.add_argument('-fe', '--freeDGs', type=Path, required=True,
                         help='Path to pandas dataframe with free energy differences for training set.')
@@ -510,17 +512,22 @@ if __name__ == '__main__':
                              'SLATM representations.')
     parser.add_argument('-env', '--environments', type=str, required=True, nargs=2,
                         help='Two filenames of pandas dataframes in glob format (e.g. SLATMS-ENV1_*.pickle).')
+    parser.add_argument('-nc', '--n_components', type=int, required=True,
+                        help='Number of principal components for PCA.')
     parser.add_argument('-dGp', '--partCoeffs', type=Path, required=False, default=Path('dG_w_ol.pkl'),
                         help='Path to pickled dictionary with bead-name: partitioning coefficient as key: value pairs, '
                              'containing water-octanol partitioning coefficients for CG beads in samples.')
     parser.add_argument('-bt', '--beadTypes', type=str, nargs='+', required=False, default=['Nda', 'P4'],
-                        help='Bead types the loadings are sorted by for plotting.')
+                        help='Bead types the loadings are sorted by for plotting loading plots.')
     parser.add_argument('-t', '--test', type=Path, required=False, nargs=2, default=None,
                         help='Paths to test data: two dataframes with SLATM representations '
                              'in two different environments.')
     parser.add_argument('-pp', '--preprocess_plotting', type=bool, required=False, default=False,
                         help='Boolean: generate Plots of data distribution throughouth preprocessing? Only relevant if '
                              'No preprocessed SLATMs are passed.')
+    parser.add_argument('-up', '--update', type=bool, required=False, default=False,
+                        help='Boolean: save the results in new files. Provides alternative to read PCA model outputs '
+                             'from file versus generating new results.')
     args = parser.parse_args()
-    main(args.directory, args.freeDGs, args.mbTypes, args.environments, args.partCoeffs, args.beadTypes, args.test,
-         args.preprocess_plotting)
+    main(args.directory, args.freeDGs, args.mbTypes, args.environments, args.n_components, args.partCoeffs,
+         args.beadTypes, args.preprocess_plotting, args.update, args.test)
