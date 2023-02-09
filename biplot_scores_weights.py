@@ -19,62 +19,58 @@ sns.set(style='whitegrid', palette='deep')
 sns.set_context(context='paper', font_scale=1.8)
 
 
-def get_weights(coeffs, x, y, bead):
-    x_head = coeffs[f'PC{x + 1}'].filter(like=bead)
-    y_head = coeffs[f'PC{y + 1}'].filter(like=bead)
-    if len(x_head.index) <= 10:
-        x_head = x_head
-        y_head = y_head
-    else:
-        x_head = x_head.astype(float)
-        y_head = y_head.astype(float)
-        x_head_pos = x_head.nlargest(20)
-        x_head_neg = x_head.nsmallest(20)
-        x_head = x_head_pos.combine_first(x_head_neg)
-        y_head = y_head[x_head.index]
-
-    lipid_head = pd.concat({f'PC{x + 1}': x_head, f'PC{y + 1}': y_head}, axis=1)
-    return lipid_head
-
-
 def get_largest(coeffs, x, y, n, interaction):
-    x_head = coeffs[f'PC{x + 1}']
-    y_head = coeffs[f'PC{y + 1}']
-    x_head = x_head.astype(float)
-    y_head = y_head.astype(float)
-    if len(x_head.index) <= n:
+    """
+    Get the largest absolute eigenvector coefficients of the first principal component and the corresponding values for
+    the second principal component, and vice versa.
+    Returns:
+          lipid_coeff: pandas dataframe with two columns, largest absolute eigenvector coefficients in one of a pair of
+          principal components and the corresponding value in the other.
+    """
+    x_coeff = coeffs[f'PC{x + 1}']
+    y_coeff = coeffs[f'PC{y + 1}']
+    x_coeff = x_coeff.astype(float)
+    y_coeff = y_coeff.astype(float)
+    if len(x_coeff.index) <= n:
         # print('foo')
-        x_head = x_head
-        y_head = y_head
+        x_coeff = x_coeff
+        y_coeff = y_coeff
     elif interaction == 'three-body':
         # print('bar')
-        x_head_pos = x_head.nlargest(n)
-        x_head_neg = x_head.nsmallest(n)
-        x_head_xtmp = x_head_pos.combine_first(x_head_neg)
-        y_head_tmp = y_head[x_head_xtmp.index]
-        y_head_pos = y_head.nlargest(n)
-        y_head_neg = y_head.nsmallest(n)
-        y_head = y_head_pos.combine_first(y_head_neg)
-        x_head_ytmp = x_head[y_head.index]
-        x_head = x_head_xtmp.combine_first(x_head_ytmp)
-        y_head = y_head.combine_first(y_head_tmp)
+        x_coeff_pos = x_coeff.nlargest(n)
+        x_coeff_neg = x_coeff.nsmallest(n)
+        x_coeff_xtmp = x_coeff_pos.combine_first(x_coeff_neg)
+        y_coeff_tmp = y_coeff[x_coeff_xtmp.index]
+        y_coeff_pos = y_coeff.nlargest(n)
+        y_coeff_neg = y_coeff.nsmallest(n)
+        y_coeff = y_coeff_pos.combine_first(y_coeff_neg)
+        x_coeff_ytmp = x_coeff[y_coeff.index]
+        x_coeff = x_coeff_xtmp.combine_first(x_coeff_ytmp)
+        y_coeff = y_coeff.combine_first(y_coeff_tmp)
     else:
         # print('baz')
-        x_head_pos = x_head.nlargest(n)
-        x_head_neg = x_head.nsmallest(n)
-        x_head = x_head_pos.combine_first(x_head_neg)
-        y_head = y_head[x_head.index]
+        x_coeff_pos = x_coeff.nlargest(n)
+        x_coeff_neg = x_coeff.nsmallest(n)
+        x_coeff = x_coeff_pos.combine_first(x_coeff_neg)
+        y_coeff = y_coeff[x_coeff.index]
 
-    lipid_head = pd.concat({f'PC{x + 1}': x_head, f'PC{y + 1}': y_head}, axis=1)
-    return lipid_head
+    lipid_coeff = pd.concat({f'PC{x + 1}': x_coeff, f'PC{y + 1}': y_coeff}, axis=1)
+    return lipid_coeff
 
 
 def plotlabel(xvar, yvar, label):
+    """
+    Adds the interaction label in a box with white background to the end of the corresponding eigenvector coefficients.
+    """
     plt.text(xvar, yvar + 0.05, label, color='k', ha='center', va='center', fontsize=11,
              bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
 
 
 def plotimage(xvar, yvar, label, letter_dict, img_size, ax):
+    """
+    If test solutes are transformed on a pretrained PCA model, images of their graph structures are added to the
+    resulting lower-dimensional points.
+    """
     box = skunk.Box(int(img_size[0] * 0.1), int(img_size[1] * 0.1), label)
     transform = ax.transData.transform((xvar, yvar))
     xdisplay, ydisplay = ax.transAxes.inverted().transform(transform)
@@ -92,19 +88,27 @@ def plotimage(xvar, yvar, label, letter_dict, img_size, ax):
 
 
 def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_path, images, pc=None, ts=None):
+    """
+    Pairwise visualization of principal components, colored by a descriptor of choice, and annotated with the main
+    absolute 2-body or 3-body interactions, or with graph images of test solutes.
+    """
+    # Upper and lower bound for color gradient according to selected descriptor.
     min_ = labels[descriptor].min()
     max_ = labels[descriptor].max()
+    # If the values of the selected descriptor can be negative, use diverging palette and center around zero.
     if min_ < 0:
         center = 0.0
         cmap = 'seismic'
         divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.TwoSlopeNorm(vmin=np.round(min_, 1), vcenter=center,
                                                                        vmax=np.round(max_, 1)))
+    # If values are only positive, select sequential gradient.
     else:
-        # center = ((max_ - min_) / 2) + min_
         cmap = 'flare'
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=colors.Normalize(vmin=np.round(min_, 1), vmax=np.round(max_, 1)))
+
     filename = ''
+    # If no principal components are passed from command line, all possible pairs are plotted in a grid.
     if not pc:
         fig = plt.figure(constrained_layout=True, figsize=(15, 14), dpi=150)
         gs = mpl.gridspec.GridSpec(nrows=4, ncols=4, figure=fig, left=0.06, bottom=0.02, right=0.68, top=0.58,
@@ -132,9 +136,13 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
 
             xs = scores[x]
             ys = scores[y]
+            # Principal component scores are scaled to the interval [-1, 1] for plotting (same scale as eigenvector
+            # coefficients).
             scalex = 1.0 / (xs.max() - xs.min())
             scaley = 1.0 / (ys.max() - ys.min())
             ax = fig.add_subplot(gs[x_idx, y_idx])
+
+            # Handle coloring of the lower-dimensional samples according to the selected descriptor.
             if min_ < 0.0:
                 sns.scatterplot(data=scores, x=scores[x] * scalex, y=scores[y] * scaley, c=labels[descriptor],
                                 alpha=0.4,
@@ -145,10 +153,15 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                                 ax=ax, cmap=cmap)
             ax.set_xlabel(x_pc, fontsize=18)
             ax.set_ylabel(y_pc, fontsize=18)
+
+            # Get n largest absolute eigenvector coefficients from each of the principal components.
             if interaction == 'three-body':
                 biggest = get_largest(coeffs, x, y, 1, interaction)
             else:
                 biggest = get_largest(coeffs, x, y, 3, interaction)
+
+            # Plot lines from the center of the axes to the point defined by the pair of eigenvector coefficients. Add
+            # labels with the corresponding many-body interaction.
             for n_body in biggest.index:
                 plt.arrow(0, 0, biggest.loc[n_body, x_pc] * scaler[0], biggest.loc[n_body, y_pc] * scaler[0],
                           color='k', alpha=0.9)
@@ -156,14 +169,19 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                          n_body, color='k', weight='bold', ha='center', va='center', fontsize=14,
                          bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
             ax.set_aspect('equal', 'box')
+
+        # Insert a label for the descriptor gradient in the last grid.
         else:
             desc_label = style_label(descriptor)
             ax = fig.add_subplot(gs[3, 3])
             plt.axis('off')
             cbar = plt.colorbar(sm, location='right', orientation='vertical', pad=-0.99, ax=ax)
             cbar.set_label(desc_label, rotation=270, labelpad=20, fontsize=18)
+
         filename = f'biplot_{interaction}_{descriptor}_6PCs.pdf'
         # plt.savefig(dir_path / f'biplot_{interaction}_{descriptor}_6PCs.pdf')
+
+    # If a specific pair of principal components is selected via the command line to generate a single biplot:
     else:
         fig = plt.figure(dpi=150)
         ax = fig.add_subplot(111)
@@ -171,36 +189,49 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
         y_pc = pc[1]
         x = int(*filter(str.isdigit, x_pc)) - 1
         y = int(*filter(str.isdigit, y_pc)) - 1
+
         xs = scores[x]
         ys = scores[y]
+        # Principal component scores are scaled to the interval [-1, 1] for plotting (same scale as eigenvector
+        # coefficients).
         scalex = 1.0 / (xs.max() - xs.min())
         scaley = 1.0 / (ys.max() - ys.min())
 
+        # Handle coloring of the lower-dimensional samples according to the selected descriptor.
         if min_ < 0.0:
             sns.scatterplot(data=scores, x=scores[x] * scalex, y=scores[y] * scaley, c=labels[descriptor], alpha=0.4,
                             ax=ax, cmap=cmap, norm=divnorm)
         else:
             sns.scatterplot(data=scores, x=scores[x] * scalex, y=scores[y] * scaley, c=labels[descriptor], alpha=0.4,
                             ax=ax, cmap=cmap)
+
+        # Add diagonal dasshed line to highlight the linear relationship between the two plotted principal components
         xlim = ax.get_xlim()
         ylim = ax.get_ylim()
         ax.plot([xlim[0], xlim[1]], [ylim[1], ylim[0]], linestyle='dashed', color='gray')
         ax.set_xlabel(x_pc, fontsize=18)
         ax.set_ylabel(y_pc, fontsize=18)
 
+        # If test solutes are passed, add their lower-dimensional points to the biplot.
         if ts is not None:
             test_scores = pd.read_pickle(ts)
             test_xs = test_scores[x]
             test_ys = test_scores[y]
+            # Principal component scores are scaled to the interval [-1, 1] for plotting (same scale as eigenvector
+            # coefficients).
             test_scalex = 1.0 / (test_xs.max() - test_xs.min())
             test_scaley = 1.0 / (test_ys.max() - test_ys.min())
+
+            # Add lower-dimensional points of the test solutes to the biplot
             sns.scatterplot(data=test_scores, x=test_scores[x] * test_scalex, y=test_scores[y] * test_scaley, color='k',
                             alpha=1.0, ax=ax)
 
+            # If no image files are passed for plotting, plot labels with identifier of each solute
             if images is None:
                 test_scores.apply(lambda test: plotlabel(test[x] * test_scalex, test[y] * test_scaley, test['sol']),
                                   axis=1)
                 filename = f'biplot_{descriptor}_{x_pc}vs{y_pc}_test-data.pdf'
+            # If image files are passed through command line, add them to the plot as inserts.
             else:
                 img_size = fig.get_size_inches() * fig.dpi
                 image_dict = dict()
@@ -214,6 +245,7 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                             break
                 ax.set_aspect('equal', 'box')
 
+                # Add color bar for the selected descriptor with the appropriate color scheme.
                 desc_label = style_label(descriptor)
                 cbar = plt.colorbar(sm, location='right', orientation='vertical', pad=.02, ax=ax)
                 cbar.set_label(desc_label, rotation=270, labelpad=30, fontsize=18)
@@ -224,6 +256,8 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                 svg = skunk.insert(image_dict)
                 filename = f'biplot_{descriptor}_{x_pc}vs{y_pc}_test-data_images.svg'
 
+        # If a pair of principal components, but no transformed SLATM representations for test solutes are passed,
+        # generate a single biplot with eigenvector coefficients and interaction labels.
         else:
             if interaction == 'three-body':
                 biggest = get_largest(coeffs, x, y, 1, interaction)
@@ -237,6 +271,7 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                          bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
                 filename = f'biplot_{interaction}_{descriptor}_{x_pc}vs{y_pc}.pdf'
 
+        # Some differences in styling and in writing to file. depending whether solute images are inserted or not.
         if images is None:
             ax.set_aspect('equal', 'box')
 
@@ -253,15 +288,24 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
 
 
 def load_data(directory, scores, coefficients, labels, interaction, descriptor, pc=None, ts=None, images=None):
+    """
+    Load principal components, descriptors and eigenvectors for the training set PCA as pandas dataframes, same data
+    for test solutes when when passed. Identify number of 1-body and 2-body interactions in order to select
+    corresponding values.
+    """
     scores = pd.read_pickle(directory / scores)
     labels = pd.read_pickle(directory / labels)
     coefficients = pd.read_pickle(directory / coefficients)
+
+    # If test solute principal components are passed, set their path.
     if ts is not None:
         ts_path = directory / ts
     else:
         ts_path = None
     n_one_body = len([idx for idx in coefficients.index if '-' not in idx])
     n_two_body = len([idx for idx in coefficients.index if len(idx.split('-')) == 2])
+
+    # Extract 2-body or 3-body interactions, scaler handles label placement for interaction labels.
     if interaction == 'two-body':
         coeffs = coefficients.iloc[n_one_body:n_two_body]
         scaler = [1.0, 1.15]
@@ -274,6 +318,9 @@ def load_data(directory, scores, coefficients, labels, interaction, descriptor, 
 
 
 if __name__ == '__main__':
+    """
+    Handles passing of PCA results, image files and setting of plotting flags via command line.
+    """
     parser = argparse.ArgumentParser('Biplot')
     parser.add_argument('-dir', '--directory', type=Path, required=True, help='Path for saving plots')
     parser.add_argument('-s', '--scores', type=Path, required=True, help='Path to dataframe with principal components')
