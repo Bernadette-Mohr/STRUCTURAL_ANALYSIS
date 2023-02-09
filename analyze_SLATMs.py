@@ -1,4 +1,4 @@
-import sys
+# general functionalities
 import warnings
 from collections import defaultdict
 import argparse
@@ -7,18 +7,15 @@ import numpy as np
 import pandas as pd
 import pickle
 from tqdm import tqdm
+# analysis
+from sklearn.decomposition import PCA
+import sklearn
+# plotting
 import plotly.express as px
-import plotly.graph_objects as go
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from matplotlib import colors
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 import seaborn as sns
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression
-from sklearn.preprocessing import StandardScaler, FunctionTransformer
-import sklearn
 
 print(sklearn.__version__)
 
@@ -32,6 +29,15 @@ sns.set_context(context='paper', font_scale=2)
 
 
 def load_data(slatms_path, environments, deltaG_path, mbt_path, test):
+    """
+    Load SLATM representation, list of many-body types and list of unique bead-type identifiers. Merge representations
+    from different files into one pandas data frame.
+    Return:
+         df: pandas dataframe containing all SLATM representations for both environments
+         mbtypes: list of all combinatorially possible interactions given the bead types present in the samples.
+         charges: dictionary with unique integer identifiers for all bead types present in the samples.
+         mapping: Mapping of GROMACS bead names to corresponding Martini and 5+1 bead names
+    """
     if test is None:
         df = pd.DataFrame()
         for cl, pg in zip(sorted(slatms_path.glob(environments[0])),
@@ -64,12 +70,23 @@ def load_data(slatms_path, environments, deltaG_path, mbt_path, test):
     return df, mbtypes, charges, mapping
 
 
-# Function for replacing bin values = 0.0 with a small epsilon value before applying logarithm
-def log_addition(data, alpha=0.0000001):
-    return np.log(np.where(data < alpha, alpha, data))
+def log_addition(data, epsilon=0.0000001):
+    """
+    Replace all bin entries < EPSILON with EPSILON. Removes zero entries for logarithmic normalization. EPSILON is
+    chosen so that overall structure of the representations is not altered.
+    Return:
+        SLATM representation with EPSILON instead of 0.0
+    """
+    return np.log(np.where(data < epsilon, epsilon, data))
 
 
 def get_if_zeroes(beads_array):
+    """
+    Check if an aSLATM representation contains 0.0 in all bins to remove empty representations if a solute consists of 
+    less than 5 beads.
+    Return:
+         boolean: False if aSLATM contains only 0.0 (bead was not present in solute), True otherwise 
+    """
     if np.all(beads_array == 0, axis=0):
         return False
     else:
@@ -77,11 +94,22 @@ def get_if_zeroes(beads_array):
 
 
 def get_non_empty(beads_list):
+    """
+    Checks an aSLATM representation for bin entries. If a solute consisted of < 5 beads, the aSLATMs of the absent beads 
+    will contain frequencies = 0.0 in all bins of the vector and is discarded.
+    Return:
+        existing_beads: list with all aSLATM representations of a solute that contain entries other than zero.
+    """
     existing_beads = [bead for bead in beads_list if get_if_zeroes(bead)]
     return existing_beads
 
 
 def calculate_avg(bead1, bead2, bead3, bead4, bead5):
+    """
+    Calculate the mean of the interaction frequencies for the aSLATMs of all beads present in a solute.
+    Return:
+        beads_mean: molecular SLATM representation for a solute.
+    """
     slatms = get_non_empty([bead1, bead2, bead3, bead4, bead5])
     beads_mean = np.mean(np.array(slatms), axis=0)
 
@@ -89,6 +117,12 @@ def calculate_avg(bead1, bead2, bead3, bead4, bead5):
 
 
 def get_bead_averages(df):
+    """
+    Transformation of multiple atomic aSLATM representations to a molecular SLATM representation for a solute in each
+    of the two environments.
+    Returns:
+        cl_df, pg_df: molecular representatins for each solute in each environment.
+    """
     cl_df = df.filter(regex=r'_cl').copy()
     pg_df = df.filter(regex=r'_pg').copy()
 
@@ -101,6 +135,10 @@ def get_bead_averages(df):
 
 
 def calculate_weights(df):
+    """
+    We weight by percentage/fraction of each interaction bin. One-body interactions therefore automatically get assigned
+    a weight of one, the 2-body and 3-body interactions get weighted by the percentage.
+    """
     weights = pd.DataFrame(index=df.index, columns=df.columns)
     if len(df.columns) == 1:
         weights = weights.fillna(1.0)
@@ -117,7 +155,13 @@ def calculate_weights(df):
 
 
 def average_interactions(df):
-    # weighted avg: (values * weights).sum() / weights.sum() --> weights as fraction/percentage: sum(weights) = 1
+    """
+    Average over the spectrum of a many-body interaction in the, weighted by the percentage they contribute.
+    weighted avg: (values * weights).sum() / weights.sum() --> weights as fraction/percentage: sum(weights) = 1
+    Returns:
+        avg_interactions: data frame with the weighted averages of the frequency of each many-body interaction, instead
+        of a frequency spectrum of said interaction.
+    """
     weights = calculate_weights(df)
     avg_interaction = pd.DataFrame((df.values * weights.values), columns=df.columns, index=df.index)
 
@@ -129,6 +173,10 @@ def get_reverse_mapping(mbtypes):
     Generates mapping from each index of SLATM vector to relevant 'mbtype interaction'.
     The numbers in the function (40 and 20) correspond to the number of bins per many-body interaction in the
     SLATM vectors.
+    Returns:
+        new_reverse_map: defaultdict with bin index of the SLATM representations as key and the corresponding many-body
+        interaction as value. As the many-body interactions are represented as freqyency spectrum over a defined cutoff
+        distance, there will be multiple keys that have the same value.
     """
 
     a = 0
@@ -175,6 +223,10 @@ def get_reverse_mapping(mbtypes):
 
 
 def get_interactions(mbtypes, charges):
+    """
+    Identifies the sections of each SLATM representations that corresponds to a specific 1-, 2- or 3-body interaction.
+    Returns: a list of all possible interactions, sorted by the sequence they are represented in the SLATM vectors.
+    """
     # Maps location in vector to which mbtype interaction it represents
     new_reverse_map = get_reverse_mapping(mbtypes)
     # Maps mbtype number to specfic bead
@@ -186,12 +238,14 @@ def get_interactions(mbtypes, charges):
     return interactions
 
 
-def add_alpha(data):
-    alpha = np.divide(1, np.power(10, np.divide(99, 10)))
-    return np.where(data < alpha, alpha, data)
-
-
 def calculate_PCA(slatms, selectivities, test_data=None, n_components=3):
+    """
+    Identify the areas with high variance in the SLATM representations, transform the coordinates accordingly.
+    Returns:
+        components: eigenvectors
+        explained_variance: eigenvalues
+        pc_df: transformed representations
+    """
     pca = PCA(n_components=n_components, random_state=1)
     X_train = pca.fit_transform(slatms)
     if test_data is None:
@@ -213,10 +267,14 @@ def calculate_PCA(slatms, selectivities, test_data=None, n_components=3):
         pc_df['dist'] = np.linalg.norm(test_data, axis=1)
         pc_df['sol'] = selectivities.agg(lambda x: f"{x['round']} {x['solute']}", axis=1)
 
-    return pc_df, explained_variance, explained_variance_ratio, components  # , covariance
+    return pc_df, explained_variance, explained_variance_ratio, components
 
 
 def plot_exp_variance_ratio(path, avg, ev, n_components=3):
+    """
+    Pairwise visualization of the explained variance ratio of the first n_components principal components, colored by
+    selectivity. Can highlight correlations between pairs of principal components.
+    """
     total_var = ev.sum() * 100
     labels = {str(i): f"PC {i + 1}" for i in range(n_components)}
     labels['color'] = 'Selectivity'
@@ -234,6 +292,10 @@ def plot_exp_variance_ratio(path, avg, ev, n_components=3):
 
 
 def plot_pca(path, df):
+    """
+     Visualization of the first three principal components in 3D, colored by selectivity. Can help identify patterns in
+     lower-dimensional space.
+    """
     size_dict = {k: v for k, v in zip(sorted(df['selec'].tolist(), reverse=True),
                                       np.linspace(0.3, 6, num=len(df['selec']), dtype=float))}
     df['size'] = df['selec'].map(size_dict)
@@ -261,13 +323,17 @@ def plot_pca(path, df):
 
 
 def plot_scree_plot(path, evr, n_components):
+    """
+     Plot the explained variance ratio of the main principal components. Can aid the selection of the number of
+     principal components to analyze.
+    """
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9))
     x = np.arange(n_components) + 1
-    ax.bar(x, evr * 100, alpha=0.7)
+    ax.bar(x, evr * 100, epsilon=0.7)
     sum_evr = np.array([])
     for idx, e in enumerate(evr):
         if idx > 0:
-            sum_evr = np.append(sum_evr, sum(evr[:idx+1]))
+            sum_evr = np.append(sum_evr, sum(evr[:idx + 1]))
         else:
             sum_evr = np.append(sum_evr, e)
     print(sum_evr * 100)
@@ -287,6 +353,10 @@ def plot_scree_plot(path, evr, n_components):
 
 
 def plot_data_distribution(path, df, title, filename, width):
+    """
+     Visualize the post-processed SLATM representations as a bar-plot, in order to chose the appropriate normalization
+     scheme according to the distribution of the interaction frequencies.
+    """
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(16, 9), dpi=150)
     hist, bin_edges = np.histogram(df, bins='auto')
     ax.bar(x=bin_edges[:-1], height=hist, log=True, width=width)
@@ -299,6 +369,12 @@ def plot_data_distribution(path, df, title, filename, width):
 
 
 def calculate_weighted_averages(slatm_mtrx, interactions, interactions_short):
+    """
+     Select all bins of each SLATM representation corresponding to one many-body interaction, pass them to the averaging
+     function, store the results in a pandas data frame.
+     Return:
+         avg_slatms: pandas data frame with averaged frequencies of all many-body interactions.
+    """
     df = pd.DataFrame(slatm_mtrx, columns=interactions)
     avg_slatms = pd.DataFrame(index=df.index, columns=interactions_short)
     groups = df.groupby(by=df.columns, sort=False, axis=1)
@@ -309,6 +385,12 @@ def calculate_weighted_averages(slatm_mtrx, interactions, interactions_short):
 
 
 def average_partitioningFE(interactions, dg_w_ol):
+    """
+     Calculate the average partitioning free energy for a many-body interaction by summing up the individual
+     partitioning free energies of the present bead types and dividing the sum by the number of involved beads.
+     Returns:
+         color_list: list of averaged partitioning free energies, in the same order as the interaction list.
+    """
     color_list = list()
     for idx in interactions:
         beads = idx.split('-')
@@ -322,23 +404,31 @@ def average_partitioningFE(interactions, dg_w_ol):
 
 
 def plot_loading_plot(path, loadings, selection, group, group_name, pc):
-
+    """
+     Plots the loadings of a selected principal component, sorted by magnitude, until a cutoff size of 1.0, separated
+     by the lipid headgroup beads Nda and P4.
+    """
+    # Adjust color gradient for water-octanol partitioning coefficients
     hist, bin_edges = np.histogram(loadings['hydrophobicity'], bins=20)
     cmap = sns.color_palette('Spectral_r', as_cmap=True)
     norm = mpl.colors.Normalize(vmin=bin_edges[0], vmax=bin_edges[-1])
     sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
-    fig = plt.figure(constrained_layout=True, figsize=(18, 3*(len(selection[group]))), dpi=150)
+
+    fig = plt.figure(constrained_layout=True, figsize=(18, 3 * (len(selection[group]))), dpi=150)
     gs = mpl.gridspec.GridSpec(nrows=len(selection[group]), ncols=2, figure=fig, left=0.02, bottom=0.02, right=0.98,
                                top=None, wspace=None, hspace=None, width_ratios=[2, 14], height_ratios=None)
     pcs = {f'PC{str(idx + 1)}': idx for idx in range(len(loadings.columns))}
 
     cutoff = 1.0
+
+    # identify and select two-body interactions
     n_two_body = len([idx for idx in loadings.index if len(idx.split('-')) == 2])
     two_body = loadings.iloc[0:n_two_body, [pcs[pc], loadings.columns.get_loc('hydrophobicity')]]
     two_body = two_body.loc[two_body[pc].abs().nlargest(len(two_body.index)).index]
-
     two_body = two_body[(two_body[pc] > cutoff) | (two_body[pc] < -cutoff)]
+
+    # separate the two-body loadings by the presence of either the CL or the PG headgroup bead
     heads_dict = dict()
     for bead in selection[group]:
         heads_dict[bead] = [idx for idx in two_body.index if bead in idx]
@@ -355,10 +445,12 @@ def plot_loading_plot(path, loadings, selection, group, group_name, pc):
 
         ax.set_ylabel(f'{lipid}', fontsize=22)  # , rotation=0
 
+    # identify and select three-body interactions
     three_body = loadings.iloc[n_two_body:, [pcs[pc], loadings.columns.get_loc('hydrophobicity')]]
     three_body = three_body.loc[three_body[pc].abs().nlargest(len(three_body.index)).index]
     three_body = three_body[(three_body[pc] > cutoff) | (three_body[pc] < -cutoff)]
     heads_dict = dict()
+    # separate the two-body loadings by the presence of either the CL or the PG headgroup bead
     for bead in selection[group]:
         if bead == 'Nda' or bead == 'P4':
             tmp = selection[group].copy()
@@ -381,20 +473,13 @@ def plot_loading_plot(path, loadings, selection, group, group_name, pc):
     # plt.show()
 
 
-def check_if_present(first, second, idx_list):
-    _first = sorted(first.split('-'))
-    _second = sorted(second.split('-'))
-    for old_first, old_second in idx_list:
-        _old_first = sorted(old_first.split('-'))
-        _old_second = sorted(old_second.split('-'))
-        if _first == _old_first and _second == _old_second:
-            return False
-        if _first == _old_second and _second == _old_first:
-            return False
-    return True
-
-
-def preprocess_slatms(df, interactions, interactions_short, path, plotting):
+def postprocess_slatms(df, interactions, interactions_short, path, plotting):
+    """
+     Calculate the ensemble average over all aSLATMs of a solute in each environment environment to obtain a
+     representation for the entrie solute, average over the spectrum of each many-body interaction, perform logarithmic
+     normalization of the SLATM representations and calculate the difference vectors between the two environments.
+     Returns: pandas dataframe with averaged, normalized differences of molecular SLATM representations for each sample.
+    """
     cl_df, pg_df = get_bead_averages(df)
     cl_df = calculate_weighted_averages(np.vstack(cl_df.cl_avg.values), interactions[:-1], interactions_short)
     if plotting:
@@ -404,11 +489,11 @@ def preprocess_slatms(df, interactions, interactions_short, path, plotting):
     if plotting:
         plot_data_distribution(path, pg_df, 'PG averaged', filename='pg_raw_distribution_avg.pdf', width=50000)
 
-    cl_df = cl_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+    cl_df = cl_df.apply(log_addition, epsilon=np.divide(1, np.power(10, np.divide(99, 10))))
     if plotting:
         plot_data_distribution(path, cl_df, 'CL log-normalized', filename='cl_avg_before_log.pdf', width=1)
 
-    pg_df = pg_df.apply(log_addition, alpha=np.divide(1, np.power(10, np.divide(99, 10))))
+    pg_df = pg_df.apply(log_addition, epsilon=np.divide(1, np.power(10, np.divide(99, 10))))
     if plotting:
         plot_data_distribution(path, pg_df, 'PG log-normalized', filename='pg_avg_before_log.pdf', width=1)
 
@@ -422,8 +507,14 @@ def preprocess_slatms(df, interactions, interactions_short, path, plotting):
 
 
 def main(path, deltaGs, mbtypes, environments, n_components, dG_w_ol, beadTypes, plotting, update, test=None):
+    """
+     Handles loading of SLATM representations, list of many-body interactions and bead-type identifiers. Generates PCA
+     or transforms test-samples on a pre-trained PCA model. Saves PCA model, components, loadings and covariance to
+     pandas dataframes.
+    """
     slatm_path = path / 'SLATMS'
-    df, mbtypes, charges, mapping = load_data(slatm_path, environments, deltaGs, mbtypes, test=test)
+
+    df, mbtypes, charges, _ = load_data(slatm_path, environments, deltaGs, mbtypes, test=test)
 
     # extract interactions represented by individual SLATM bins.
     interactions = get_interactions(mbtypes, charges)
@@ -438,18 +529,21 @@ def main(path, deltaGs, mbtypes, environments, n_components, dG_w_ol, beadTypes,
     try:
         avg_slatms = pd.read_pickle(train_path)
     except FileNotFoundError:
-        avg_slatms = preprocess_slatms(df, interactions, interactions_short, train_path, plotting)
+        avg_slatms = postprocess_slatms(df, interactions, interactions_short, train_path, plotting)
 
     if test is None:
-        if update:
-            (pc_df,
-             explained_variance,
-             explained_variance_ratio,
-             components) = calculate_PCA(avg_slatms, selectivities=df[['round', 'solute', 'DeltaDeltaG']],
-                                         n_components=n_components)
+        (pc_df,
+         explained_variance,
+         explained_variance_ratio,
+         components) = calculate_PCA(avg_slatms, selectivities=df[['round', 'solute', 'DeltaDeltaG']],
+                                     n_components=n_components)
+
         if plotting:
+            # Pairwise visualization of the explained variance ratio of the first n principal components.
             plot_exp_variance_ratio(path, pc_df, explained_variance_ratio, n_components)
+            # Visualization of the first three principal components in 3D.
             plot_pca(path, pc_df)
+            # Visualization of the explained variance ratio of the first n_components principal components
             plot_scree_plot(path, explained_variance_ratio, n_components)
         if update:
             pc_df.to_pickle(f'{path}/weighted_average_PCA_{str(n_components)}PCs.pickle')
@@ -480,7 +574,7 @@ def main(path, deltaGs, mbtypes, environments, n_components, dG_w_ol, beadTypes,
         try:
             test_slatms = pd.read_pickle(test_path)
         except FileNotFoundError:
-            test_slatms = preprocess_slatms(test_df, interactions, interactions_short, test_path, plotting)
+            test_slatms = postprocess_slatms(test_df, interactions, interactions_short, test_path, plotting)
 
         (pc_df,
          explained_variance,
@@ -500,6 +594,9 @@ def main(path, deltaGs, mbtypes, environments, n_components, dG_w_ol, beadTypes,
 
 
 if __name__ == '__main__':
+    """
+     Handle the required command-line input for running the analysis on a set of SLATM representations.
+    """
     parser = argparse.ArgumentParser('Analyze SLATM representations of MD-Trajectories. '
                                      'Optional: make predictions on test data.')
     parser.add_argument('-dir', '--directory', type=Path, required=True,
@@ -528,6 +625,8 @@ if __name__ == '__main__':
     parser.add_argument('-up', '--update', type=bool, required=False, default=False,
                         help='Boolean: save the results in new files. Provides alternative to read PCA model outputs '
                              'from file versus generating new results.')
+
     args = parser.parse_args()
+
     main(args.directory, args.freeDGs, args.mbTypes, args.environments, args.n_components, args.partCoeffs,
          args.beadTypes, args.preprocess_plotting, args.update, args.test)
