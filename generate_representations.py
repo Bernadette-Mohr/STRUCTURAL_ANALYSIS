@@ -8,12 +8,10 @@ import qml
 
 
 def get_atom_features(itp):
-    """
-        Return dataframe with info about residue structure in itp file.
-        Only works for first molecule entry in itp file.
-
-        itp (str): path to .itp file.
-        """
+    # Extracts information about solute structure from GROMACS topology (itp) file.
+    # Return:
+    #   bead_types (dict): "round": screening round, "molecule": identifier of solute in screening round,
+    #                      "types": list of bead types present in a solute.
     rgx = re.compile(r'(?<=\[atoms\]\n).*(?=\[bonds\])', re.DOTALL | re.MULTILINE)
     molecule = itp.stem
     round_ = itp.parts[-4]
@@ -29,6 +27,13 @@ def get_atom_features(itp):
 
 
 def make_mbtypes(compounds):
+    # Renames GROMACS coarse-grained particles to Martini bead names and small ('S') type beads to normal beads.
+    # Generates a list of unique integer identifiers for all particles in the samples and a list of all combinatorially
+    # possible 2- and 3-body interactions.
+    # Return:
+    #   results (dict): "mbtypes" (list) : all combinatorially possible interactions, "charges" (list): unique integer
+    #                   identifiers for all particles, "mapping" (dict): key-value pairs of GROMACS-Martini bead names.
+    #   compounds (pandas dataframe): all
     mapping_dict = {'GL0P': 'P4',
                     'PO4': 'Qa',
                     'GL1': 'Na',
@@ -92,24 +97,27 @@ def make_mbtypes(compounds):
     W_beads = {'round': 'ALL', 'molecule': 'WATER', 'types': ['W']}
     rows = [PG_beads, CL_beads, NA_beads, W_beads]
     new_df = pd.DataFrame.from_dict(rows, orient='columns')
-    """
-     Generating "charges" for each type (they function as unique identifiers)
-    """
+    # Generating "charges" for each type (in the case of coarse-grained particles, unique integer identifiers)
     charges_list = set(mapping_dict.values())
     charges_dict = {k: i for i, k in enumerate(charges_list, start=1)}
     compounds = pd.concat([compounds, new_df], ignore_index=True)
-    """
-     Generating many-body types
-    """
+    # Generating many-body types: all combinatorially possible unique 2- and 3-body interactions
     charges_per_compound = [[charges_dict[mapping_dict[bead]] for bead in compound] for compound in
                             compounds['types'].tolist()]
     mbtypes = qml.representations.get_slatm_mbtypes(charges_per_compound)
     mbtypes = [list(i) for i in mbtypes]
     results = {'mbtypes': mbtypes, 'charges': charges_dict, 'mapping': mapping_dict}
+
     return results, compounds
 
 
 def pad_bead_number(means):
+    # If a solute consists of less than five coarse-grained beads, add an empty numpy vector of appropriate length
+    # filled with zeros for each of the 5 - N missing beads. Also replaces eventual NaN values in averaged SLATM
+    # representation by 0.0. Allows easy insertion in pandas dataframe.
+    # Return:
+    #   list: list containing SLATM representations and arrays filled with zeros as placeholders if the number of beads
+    #         in a solute is less than five.
 
     N = 5
     pad_value = np.zeros(means[0].size)
@@ -123,7 +131,7 @@ def pad_bead_number(means):
 
 
 class GenerateRepresentation:
-
+    # Handles generation of SLATM representations.
     def __init__(self, mapping_dict, charges_dict, mbtypes, visuals=False):
         self.mapping_dict = mapping_dict
         self.charges_dict = charges_dict
@@ -131,9 +139,9 @@ class GenerateRepresentation:
         self.visuals = visuals
 
     def get_charges(self, sel):
-        """
-        Returns list with unique charges per bead.
-        """
+        # Sets unique integer identifier for each bead.
+        # Return:
+        #   chargs (list): list of the integer identifiers in
         charges = []
 
         for i, at in enumerate(sel):
@@ -144,16 +152,20 @@ class GenerateRepresentation:
             elif name == 'GL0' and at.resname == "POPG":
                 name = 'GL0P'
 
+            # Return all (wildcard "?") values of the mapping dict (Martini bead names).
             type_at = self.mapping_dict.get(name, "?")
+            # Add the integers corresponding to the bead names to a list. Integers can appear multiple times in charges,
+            # several GROMACS bead types map to the same Martini type in mapping_dict.
             charges.append(self.charges_dict.get(type_at, "?"))
 
         return charges
 
     def make_representation(self, atoms, positions) -> object:
-        """
-        For each frame, generates slatm representation.
-        :rtype: object
-        """
+        # For each bead in a solute and for each frame in the MD trajectory, generates a SLATM representation.
+        # Averages over the representations of a bead to obtain one ensemble average SLATM representation.
+        # Return:
+        #   means (list): ensemble averaged SLATM representations for each bead in the solute, zero-arrays to increase
+        #                 the number of representations to five if neccessary.
         rep_frames = []
         for idx, (at_frame, pos_frame) in enumerate(tqdm.tqdm(zip(atoms, positions), total=len(atoms), desc='Frames',
                                                               leave=True)):
@@ -161,7 +173,6 @@ class GenerateRepresentation:
             rep_frame = qml.representations.generate_slatm(pos_frame, charges_arr, self.mbtypes,
                                                            local=True, sigmas=[0.3, .2], dgrids=[.2, .2], rcut=8.,
                                                            rpower=6)
-
             rep_frames.append(rep_frame)
 
         print('Calculate configurational average...')

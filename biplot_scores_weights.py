@@ -19,24 +19,20 @@ sns.set(style='whitegrid', palette='deep')
 sns.set_context(context='paper', font_scale=1.8)
 
 
-def get_largest(coeffs, x, y, n, interaction):
-    """
-    Get the largest absolute eigenvector coefficients of the first principal component and the corresponding values for
-    the second principal component, and vice versa.
-    Returns:
-          lipid_coeff: pandas dataframe with two columns, largest absolute eigenvector coefficients in one of a pair of
-          principal components and the corresponding value in the other.
-    """
+def get_largest(coeffs, x, y, n):
+    # Get the largest absolute eigenvector coefficients of the first principal component and the corresponding values
+    # for the second principal component, and vice versa.
+    # Return:
+    #   lipid_coeff (pandas dataframe): two columns, largest absolute eigenvector coefficients in one of a pair of
+    #                                   principal components and the corresponding value in the other.
     x_coeff = coeffs[f'PC{x + 1}']
     y_coeff = coeffs[f'PC{y + 1}']
     x_coeff = x_coeff.astype(float)
     y_coeff = y_coeff.astype(float)
     if len(x_coeff.index) <= n:
-        # print('foo')
         x_coeff = x_coeff
         y_coeff = y_coeff
-    elif interaction == 'three-body':
-        # print('bar')
+    else:
         x_coeff_pos = x_coeff.nlargest(n)
         x_coeff_neg = x_coeff.nsmallest(n)
         x_coeff_xtmp = x_coeff_pos.combine_first(x_coeff_neg)
@@ -47,30 +43,21 @@ def get_largest(coeffs, x, y, n, interaction):
         x_coeff_ytmp = x_coeff[y_coeff.index]
         x_coeff = x_coeff_xtmp.combine_first(x_coeff_ytmp)
         y_coeff = y_coeff.combine_first(y_coeff_tmp)
-    else:
-        # print('baz')
-        x_coeff_pos = x_coeff.nlargest(n)
-        x_coeff_neg = x_coeff.nsmallest(n)
-        x_coeff = x_coeff_pos.combine_first(x_coeff_neg)
-        y_coeff = y_coeff[x_coeff.index]
 
     lipid_coeff = pd.concat({f'PC{x + 1}': x_coeff, f'PC{y + 1}': y_coeff}, axis=1)
     return lipid_coeff
 
 
 def plotlabel(xvar, yvar, label):
-    """
-    Adds the interaction label in a box with white background to the end of the corresponding eigenvector coefficients.
-    """
+    # Adds the interaction label in a box with white background to the end of the corresponding eigenvector
+    # coefficients.
     plt.text(xvar, yvar + 0.05, label, color='k', ha='center', va='center', fontsize=11,
              bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
 
 
 def plotimage(xvar, yvar, label, letter_dict, img_size, ax):
-    """
-    If test solutes are transformed on a pretrained PCA model, images of their graph structures are added to the
-    resulting lower-dimensional points.
-    """
+    # If test solutes are transformed on a pretrained PCA model, images of their graph structures are added to the
+    # resulting lower-dimensional points.
     box = skunk.Box(int(img_size[0] * 0.1), int(img_size[1] * 0.1), label)
     transform = ax.transData.transform((xvar, yvar))
     xdisplay, ydisplay = ax.transAxes.inverted().transform(transform)
@@ -88,10 +75,9 @@ def plotimage(xvar, yvar, label, letter_dict, img_size, ax):
 
 
 def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_path, images, pc=None, ts=None):
-    """
-    Pairwise visualization of principal components, colored by a descriptor of choice, and annotated with the main
-    absolute 2-body or 3-body interactions, or with graph images of test solutes.
-    """
+    # Pairwise visualization of principal components, colored by a descriptor of choice, and annotated with the main
+    # absolute 2-body or 3-body interactions, or with graph images of test solutes.
+
     # Upper and lower bound for color gradient according to selected descriptor.
     min_ = labels[descriptor].min()
     max_ = labels[descriptor].max()
@@ -156,9 +142,9 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
 
             # Get n largest absolute eigenvector coefficients from each of the principal components.
             if interaction == 'three-body':
-                biggest = get_largest(coeffs, x, y, 1, interaction)
+                biggest = get_largest(coeffs, x, y, 1)
             else:
-                biggest = get_largest(coeffs, x, y, 3, interaction)
+                biggest = get_largest(coeffs, x, y, 2)
 
             # Plot lines from the center of the axes to the point defined by the pair of eigenvector coefficients. Add
             # labels with the corresponding many-body interaction.
@@ -271,8 +257,12 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
                          bbox=dict(boxstyle='square, pad=0.0', edgecolor=None, facecolor='w', alpha=0.5))
                 filename = f'biplot_{interaction}_{descriptor}_{x_pc}vs{y_pc}.pdf'
 
-        # Some differences in styling and in writing to file. depending whether solute images are inserted or not.
-        if images is None:
+        # Differences in styling and writing to file, depending on whether solute images are inserted or not.
+        if images:
+            svg_path = dir_path / filename
+            with open(svg_path, 'w') as svgfile:
+                svgfile.write(svg)
+        else:
             ax.set_aspect('equal', 'box')
 
             desc_label = style_label(descriptor)
@@ -281,18 +271,12 @@ def plot_biplot(scores, coeffs, scaler, labels, interaction, descriptor, dir_pat
 
             plt.tight_layout()
             plt.savefig(dir_path / filename)
-        else:
-            svg_path = dir_path / filename
-            with open(svg_path, 'w') as svgfile:
-                svgfile.write(svg)
 
 
 def load_data(directory, scores, coefficients, labels, interaction, descriptor, pc=None, ts=None, images=None):
-    """
-    Load principal components, descriptors and eigenvectors for the training set PCA as pandas dataframes, same data
-    for test solutes when when passed. Identify number of 1-body and 2-body interactions in order to select
-    corresponding values.
-    """
+    # Load principal components, descriptors and eigenvectors for the training set PCA as pandas dataframes, same data
+    # for test solutes when when passed. Identify number of 1-body and 2-body interactions in order to select
+    # corresponding values.
     scores = pd.read_pickle(directory / scores)
     labels = pd.read_pickle(directory / labels)
     coefficients = pd.read_pickle(directory / coefficients)
@@ -318,9 +302,7 @@ def load_data(directory, scores, coefficients, labels, interaction, descriptor, 
 
 
 if __name__ == '__main__':
-    """
-    Handles passing of PCA results, image files and setting of plotting flags via command line.
-    """
+    # Handles passing of PCA results, image files and setting of plotting flags via command line.
     parser = argparse.ArgumentParser('Biplot')
     parser.add_argument('-dir', '--directory', type=Path, required=True, help='Path for saving plots')
     parser.add_argument('-s', '--scores', type=Path, required=True, help='Path to dataframe with principal components')
@@ -335,7 +317,8 @@ if __name__ == '__main__':
     parser.add_argument('-ts', '--test_scores', type=Path, required=False,
                         help='Path to dataframe with principal components of test data generated by pretrained model.')
     parser.add_argument('-ims', '--images', type=Path, required=False, nargs='+', default=None,
-                        help='Paths to svg files with graph images for inserting images instead of solute labels.')
+                        help='Paths to files with graph images in SVG format for inserting images instead of solute '
+                             'labels.')
 
     # -ts weighted_average_PCA_6PCs_test-data.pickle
     # -ims /home/bernadette/Documents/STRUCTURAL_ANALYSIS/ROUND_6_molecule_48.svg

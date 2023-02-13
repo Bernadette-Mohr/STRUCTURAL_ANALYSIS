@@ -21,6 +21,9 @@ print(mda.__version__)
 
 
 def get_topologies(cdl2_results):
+    # Find the GROMACS topology files (itp) in the specified base directories.
+    # Return:
+    #   itp_list (list): list with paths to retrieved files.
     itp_list = list()
     for run_dir in sorted(cdl2_results.glob('ROUND_*/molecule_*/**')):
         if not Path(f'{run_dir}/prod-79.xtc').is_file() and not Path(f'{run_dir}/prod-39.xtc').is_file():
@@ -31,10 +34,14 @@ def get_topologies(cdl2_results):
 
 
 def get_atom_features(itp_list):
+    # For all samples, extract the bead types present in the solute.
+    # Return:
+    #   compounds (pandas dataframe): with columns ['round' (screening round), 'molecule' (solute identifier),
+    #                                 'types' (bead types of the solute beads)]
     compound_list = list()
     for itp in itp_list:
         itp = itp
-        types_dict = generate_representations.get_atom_features(itp, 'charge')
+        types_dict = generate_representations.get_atom_features(itp)
         compound_list.append(types_dict)
 
     compounds = pd.DataFrame(compound_list)
@@ -43,9 +50,13 @@ def get_atom_features(itp_list):
 
 
 def get_test_dir(run_dir):
+    # Generate a path for the second environment based on the path to the first environment. Used to test if a
+    # simulation was run in both environments. Code expects both directory paths to have the same structure.
+    # Return:
+    #   test_dir (pathlib path): path to the second environment run directory.
+    # Subdirectory patterns are hardcoded!
     dir_list = list(run_dir.parts)
     if 'CDL2' not in dir_list:
-        # dir_list[dir_list.index('POPG')] = 'CDL2'
         dir_list = [part.replace('POPG', 'CDL2') if 'POPG' in part else part for part in dir_list]
         test_dir = Path('').joinpath(*dir_list)
     else:
@@ -54,19 +65,19 @@ def get_test_dir(run_dir):
     return test_dir
 
 
-def chunks(list_, n):
-    """Yield n number of sequential chunks from a list."""
-    quotient, remainder = divmod(len(list_), n)
-    for idx in range(n):
-        si = (quotient+1)*(idx if idx < remainder else remainder) + quotient*(0 if idx < remainder else idx - remainder)
-        yield list_[si:si + (quotient + 1 if idx < remainder else quotient)]
-
-
 def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtypes=None):
+    # File name patterns, numbers of last coupling steps, diectory paths etc. are hard-coded!
+    # Identifies the last simulation of a free energy calculation (hard-coded, step no. 39 or 79 for neutral or charged
+    # compounds). Corrects for periodic boundary conditions, centers systems around solutes and selects n trajectory
+    # frames if necessary.
+    # Generates the list of many-body interactions and particle identifiers if not provided.
+    # Handles the generation of SLATM representations.
     tpr = re.compile(r'prod-(79|39).tpr$')
     xtc = re.compile(r'prod-(79|39).xtc$')
+
+    # Check if trajectories are already processed, perform corrections and centering otherwise.
     if len([str(path) for path in list(cdl2_results.rglob('ROUND_*/molecule_*/**/*')) if re.search(xtc, path.name)]) - \
-            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) > 5:
+            len(list(cdl2_results.glob('ROUND_*/molecule_*/**/*-molecule_*.gro'))) != 0:
         print('Cleaning up trajectory...')
         for cl_round_mols, pg_round_mols in tqdm(zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False), 
                                                      sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)),
@@ -91,10 +102,11 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                         del clean
                         gc.collect()
 
+    # Checks for list of many-body interactions, generates and saves if not passed.
     if not mbtypes:
         print('Generating mbtypes...')
         itp_list = get_topologies(cdl2_results)
-        # get manybody interaction types found in the data set
+        # get many-body interaction types found in the data set
         results, compounds = generate_representations.make_mbtypes(get_atom_features(itp_list))
         pkl_path = cdl2_results.parent / 'mbtypes_charges_mapping.pkl'
         with open(pkl_path, 'wb') as handle:
@@ -106,13 +118,18 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
         with open(mbtypes, 'rb') as infile:
             results = pickle.load(infile)
 
+    # If clean trajectories and list of many-body interactions are present, generate SLATM representations for each
+    # particle in a solute in each environment.
     print('Generating SLATM representations...')
     for lipid_path in [cdl2_results, popg_results]:
         lipid = lipid_path.parts[-1]
+        # batch-wise if selected
         if batch_file:
             df_path = cdl2_results.parent / f'SLATMS-{lipid}-batch_{batch}.pickle'
         else:
             df_path = cdl2_results.parent / f'SLATMS-{lipid}.pickle'
+        # Generate a new pandas dataframe for the SLATM representation if none is passed, append to an existing
+        # dataframe otherwise.
         if not df_path.is_file():
             slatms_df = pd.DataFrame(columns=['round', 'solute', 'bead1', 'bead2', 'bead3', 'bead4', 'bead5'])
             for rnd_path in sorted(lipid_path.glob('ROUND_*')):
@@ -126,17 +143,21 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                 else:
                     solutes = list(sorted(rnd_path.glob('molecule_*')))
 
+                # Extract solute name, screening round from directory path and filenames.
                 for mol in solutes:
                     molecule = mol.parts[-1]
                     print(molecule)
                     run_dir = list(mol.rglob('*'))[0]
                     test_dir = get_test_dir(run_dir)
 
+                    # Check if a simulation has been run in the second environment, otherwise skip. (Solutes that have
+                    # been discarded based on results in the first environment and will now not be analyzed.)
                     if not Path(f'{test_dir}/prod-79.xtc').is_file() and \
                             not Path(f'{test_dir}/prod-39.xtc').is_file():
-                        print('oops')
+                        print('No run output files in this directory!')
                         continue
                     else:
+                        # Last check if cleaned up trajectories are present.
                         if not Path(f'{run_dir}/prod-{molecule}.xtc').is_file() or \
                                 not Path(f'{run_dir}/prod-{molecule}.gro'):
                             print('Cleaning up trajectory...')
@@ -148,9 +169,12 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                             del clean
                             gc.collect()
 
+                    # Extract particle names and coordinates of the solutes and all environment components within the
+                    # cutoff distance of the long-range interactions around the COM of the solute.
                     pre = preprocessing.PreprocessPipeline(f'{run_dir}/prod-{molecule}.tpr',
                                                            f'{run_dir}/prod-{molecule}.xtc')
                     sel_atoms, sel_positions = pre.preprocess_sim_data()
+                    # Generate the SLATM representations for each bead in a solute, append to dataframe.
                     rep = generate_representations.GenerateRepresentation(results['mapping'], results['charges'],
                                                                           results['mbtypes'])
                     means = rep.make_representation(sel_atoms, sel_positions)
@@ -161,6 +185,7 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
                     del rep, pre
                     gc.collect()
 
+            # Save set of SLATM representations.
             slatms_df.to_pickle(df_path)
 
             del slatms_df
@@ -168,7 +193,10 @@ def process_data(cdl2_results, popg_results, batch_file=None, batch=None, mbtype
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Pipeline for strucutral analysis of CG trajectories. Uses SLATM representation.')
+    # Processing command line input of directory paths, an optional selection of samples to be processed (batch_file,
+    # batch), information for the QML SLATM module to generate the representations (mbtypes, charges, mapping).
+    parser = argparse.ArgumentParser('Pipeline for analyzing many-body interactions from coarse-grained MD '
+                                     'trajectories. Uses SLATM representation.')
     parser.add_argument('-clp', type=Path, required=True, help='Path to the MD simulation results for CL.')
     parser.add_argument('-pgp', type=Path, required=True, help='Path to the MD simulation results for PG.')
     parser.add_argument('-bf', '--batch_file', type=Path, required=False, help='File with dataset divided in batches by'

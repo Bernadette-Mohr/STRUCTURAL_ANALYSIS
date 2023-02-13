@@ -6,11 +6,19 @@ import pickle
 
 
 def clean_graph(graph):
+    # Remove selfloop edges of graphs. (No use in molecular representation)
+    # Return:
+    #   graph (Networkx graph): graph object sans selflooping edges.
     graph.remove_edges_from(nx.selfloop_edges(graph))
+
     return graph
 
 
 def get_constraints(template):
+    # Read correct constraints from template topology file, clean up (replace random numbers of consecutive whitespaces
+    # by tab character.
+    # Return:
+    #   template (dict): templates dictionary with constraints added as formatted string.
     rgx = re.compile(r'(?<=\[bonds\]\n).*(?=\[ exclusions \])', re.DOTALL | re.MULTILINE)
     tab = re.compile(r'\s{4}|\s{3}')
     with open(template['constr'], 'rt') as itp_file:
@@ -23,6 +31,8 @@ def get_constraints(template):
 
 
 def make_templates():
+    # Loads all pickle files with graph objects, select the graphs that will be used as template for structural
+    # constraints. File paths are hard coded!
     g_0 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_0/graphs/round_0_kmeans.pkl', 'rb'))
     g_1 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_1/graphs/graphs_round_1.pkl', 'rb'))
     g_2 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_2/graphs/graphs_round_2.pkl', 'rb'))
@@ -30,8 +40,10 @@ def make_templates():
     g_4 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_4/graphs/graphs_round_4.pkl', 'rb'))
     g_5 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_5/graphs/graphs_round_5.pkl', 'rb'))
     g_6 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_6/graphs/graphs_round_6.pkl', 'rb'))
-    g_7 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_7/graphs/graphs_round_7_reDo.pkl', 'rb'))
+    g_7 = pickle.load(open('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/GRAPHS/ROUND_7/graphs/graphs_round_7_reDo.pkl',
+                           'rb'))
 
+    # List of all example graph objects.
     template_graphs = [clean_graph(g_0[0]), clean_graph(g_0[1]), clean_graph(g_0[7]), clean_graph(g_0[8]),
                        clean_graph(g_0[9]), clean_graph(g_0[14]), clean_graph(g_0[16]), clean_graph(g_0[17]),
                        clean_graph(g_0[18]), clean_graph(g_0[26]), clean_graph(g_0[27]), clean_graph(g_0[50]),
@@ -41,6 +53,8 @@ def make_templates():
                        clean_graph(g_3[46]), clean_graph(g_4[39]), clean_graph(g_5[36]), clean_graph(g_5[37]),
                        clean_graph(g_5[44]), clean_graph(g_6[20]), clean_graph(g_7[26])]
 
+    # Dictionary with name, neighbor list exclusion value ('nrexcl') and path to topology file with manually inserted
+    # structural constraints.
     r0_mol0 = {'name': 'ROUND_0-molecule_00',
                'nrexcl': '2',
                'constr': Path(
@@ -166,18 +180,19 @@ def make_templates():
                 'constr': Path(
                     '/media/bmohr/Backup/STRUCTURAL_ANALYSIS/DEBUGGING/ROUND_7/CDL2-molecule_26-39/molecule_26.itp')}
 
+    # List of the constraint dictionaries
     constraints = [r0_mol0, r0_mol1, r0_mol7, r0_mol8, r0_mol9, r0_mol14, r0_mol16, r0_mol17, r0_mol18, r0_mol26,
-                   r0_mol27,
-                   r0_mol50, r0_mol95, r1_mol0, r1_mol7, r1_mol11, r1_mol24, r1_mol26, r1_mol37, r1_mol40, r2_mol6,
-                   r2_mol17,
-                   r2_mol25, r2_mol28, r3_mol46, r4_mol39, r5_mol36, r5_mol37, r5_mol44, r6_mol20, r7_mol26]
+                   r0_mol27, r0_mol50, r0_mol95, r1_mol0, r1_mol7, r1_mol11, r1_mol24, r1_mol26, r1_mol37, r1_mol40,
+                   r2_mol6, r2_mol17, r2_mol25, r2_mol28, r3_mol46, r4_mol39, r5_mol36, r5_mol37, r5_mol44, r6_mol20,
+                   r7_mol26]
 
+    # Add graph object with matching constraint information to a dictionary.
     for idx, template in enumerate(constraints):
         template['graphs'] = template_graphs[idx]
         constraints[idx] = get_constraints(template)
 
+    # Save template dictionary as pandas dataframe.
     df = pd.DataFrame(constraints)
-
     df.to_pickle('/media/bmohr/Backup/STRUCTURAL_ANALYSIS/constraint_templates.pickle')
 
 

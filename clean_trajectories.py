@@ -7,11 +7,9 @@ from MDAnalysis.analysis.lineardensity import LinearDensity
 
 
 def find_duplicate_positions(universe, selection):
-    """
-    Returns boolean array with:
-    True: coordinates are ok and
-    False: duplicate coordinates are found, to indicate that this frame needs to be dropped from the analysis.
-    """
+    # Return: boolean array with:
+    #   True: coordinates are ok and
+    #   False: duplicate coordinates are found, to indicate that this frame needs to be dropped from the analysis.
     bools = list()
     for timestep in universe.trajectory:
         # print(timestep)
@@ -24,11 +22,9 @@ def find_duplicate_positions(universe, selection):
 
 
 def calculate_ld(solute, filter_):
-    """
-     Use mass density of the solute along the z coordinate to select the n frames where the COM of the solute 
-     is closest to the center of the bin with the highest occupation of the solute over the whole trajectory.
-     Binsize: 0.1 Å
-    """
+    # Use mass density of the solute along the z coordinate to select the n frames where the COM of the solute
+    # is closest to the center of the bin with the highest occupation of the solute over the whole trajectory.
+    # Binsize: 0.1 Å
     ldens = LinearDensity(select=solute, grouping='fragments', binsize=0.1, verbose=True)
     ldens.run()
     left = ldens.results.z.hist_bin_edges[ldens.results.z.mass_density.argmax(axis=0)]
@@ -45,16 +41,24 @@ def calculate_ld(solute, filter_):
 
 
 class PrepareTrajectory:
-
+    # Load GROMACS coordinate (gro) and trajectory (xtc) files, generate MDAnalysis universe object
     def __init__(self, coordinates, trajectory):
         self.coords = coordinates,
         self.traj = trajectory
         self.universe = mda.Universe(coordinates, trajectory, in_memory=True)
 
+    # Safely delete object after use, out of memory reasons.
     def __del__(self):
         class_name = self.__class__.__name__
         print(f'{class_name} deleted')
 
+    # 1) Correct the trajectory for periodic boundary conditions, center around the solute.
+    # 2) Extract the solute and all environment particles within long-range interaction cutoff distance around the
+    #    solute COM.
+    # 3) Make sure there are no two particles with overlapping coordinates. If found, drop corresponding frame from
+    #    trajectory.
+    # 4) Select n frames where the solute COM is in the range of the highest occupaion probabliity of the solute COM.
+    # Writes new, cleaned up coordinate and trajectory files.
     def clean_and_crop(self, filename):
         universe = self.universe
         probe_mol = universe.select_atoms('resname MOL', updating=True)
@@ -67,18 +71,12 @@ class PrepareTrajectory:
         solute = universe.select_atoms('(resname MOL or around 11 resname MOL) and '
                                        'not (name WP or name WM or name NAP or name NAM)', updating=True)
 
-        """
-         bools: list with boolean values indicating whether the frame at the corresponding timestep should be kept.
-        """
+        # bools: list with boolean values indicating whether the frame at the corresponding timestep should be kept.
         bools = find_duplicate_positions(universe, solute)
-        """
-         Trajectory minus the frames containing indentical particle positions.
-        """
+        # Trajectory minus the frames containing indentical particle positions.
         filter_ = universe.trajectory[bools]
 
-        """
-         Select n frames with solute COM in area of highest occupation probability.
-        """
+        # Select n frames with solute COM in area of highest occupation probability.
         short_traj = calculate_ld(solute, filter_)
 
         with mda.Writer(f'{filename}.xtc', n_atoms=universe.atoms.n_atoms) as xtc:
@@ -91,7 +89,10 @@ class PrepareTrajectory:
                 gro.write(universe)
 
 
-def load_trajectroy(cdl2_results, popg_results):
+def load_trajectory(cdl2_results, popg_results):
+    # Iterate over all run directories in ascending order, pairwise for both environments.
+    # Check if simulation output files are present in both environments.
+    # Perform trajectory pre-processing.
     for cl_round_mols, pg_round_mols in zip(sorted(cdl2_results.glob('ROUND_*/molecule_*'), reverse=False),
                                             sorted(popg_results.glob('ROUND_*/molecule_*'), reverse=False)):
         molecule = cl_round_mols.parts[-1]
@@ -114,10 +115,11 @@ def load_trajectroy(cdl2_results, popg_results):
 
 
 if __name__ == '__main__':
+    # Takes paths to base directories of two environments with simulation results.
     parser = argparse.ArgumentParser('Provide input for methods of class PreprocessPipeline.')
-    parser.add_argument('-clp', type=Path, required=True, help='Path to the MD simulation results for CL.')
-    parser.add_argument('-pgp', type=Path, required=True, help='Path to the MD simulation results for PG.')
+    parser.add_argument('-clp', type=Path, required=True, help='Path to the MD simulation results for ENVIRONMENT A.')
+    parser.add_argument('-pgp', type=Path, required=True, help='Path to the MD simulation results for ENVIRONMENT B.')
 
     args = parser.parse_args()
 
-    load_trajectroy(args.clp, args.pgp)
+    load_trajectory(args.clp, args.pgp)

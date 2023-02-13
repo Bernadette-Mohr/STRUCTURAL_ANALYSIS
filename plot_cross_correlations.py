@@ -8,11 +8,10 @@ import seaborn as sns
 from matplotlib import colors
 
 sns.set_context(context='paper', font_scale=1.5)
-# plt.rcParams['text.usetex'] = True
 
 
 def style_label(label):
-
+    # Styles y-axis labels for cross-correlation plots depending on which descriptor is used.
     if label == 'selectivity':
         deltaG = r"$\Delta\Delta G$"
         label = f'{label.capitalize()} {deltaG} [kcal/mol]'
@@ -34,7 +33,10 @@ def style_label(label):
 
 
 def plot_cross_correlation(df, label, dir_path, pc=None):
+    # Plot cross-correlations between principal components and a descriptor, either for all components in a data frame
+    # or for a selected one.
 
+    # Color scheme is selected depending on if the descriptor contains negative numbers or only positive numbers.
     min_ = df[label].min()
     max_ = df[label].max()
     if min_ < 0:
@@ -42,12 +44,11 @@ def plot_cross_correlation(df, label, dir_path, pc=None):
         cmap = 'coolwarm'
         divnorm = colors.TwoSlopeNorm(vmin=min_, vcenter=center, vmax=max_)
     else:
-        # center = ((max_ - min_) / 2) + min_
         cmap = 'flare'
         divnorm = None
-    # print(min_, center, max_)
     y_label = style_label(label)
 
+    # If no principal component is passed, all of them are plotted.
     if not pc:
         fig, axes = plt.subplots(2, 3, figsize=(8, 5), sharey='row', dpi=150)
         axes = axes.flatten()
@@ -56,6 +57,8 @@ def plot_cross_correlation(df, label, dir_path, pc=None):
                 sns.scatterplot(x=col, y=label, c=df[label], data=df, alpha=0.9, ax=axes[idx], cmap=cmap, norm=divnorm)
             else:
                 sns.scatterplot(x=col, y=label, c=df[label], data=df, alpha=0.9, ax=axes[idx], cmap=cmap)
+            # Add linear regression line to provide an estimate of the linear correlation between descriptor and
+            # principal components.
             reg = LinearRegression()
             reg.fit(np.vstack(df[col].values), np.vstack(df[label]))
             score = reg.score(np.vstack(df[col].values), np.vstack(df[label]))
@@ -66,10 +69,9 @@ def plot_cross_correlation(df, label, dir_path, pc=None):
             axes[idx].legend()
             axes[idx].set_xlabel(f'PC {idx + 1}')
             axes[idx].set_ylabel(f'{y_label}')
-        # fig.delaxes(axes[-1])
         plt.tight_layout()
         plt.savefig(dir_path / f'cross-correlation_wghtd-avg_{label}_6PCs.pdf', bbox_inches='tight')
-        # plt.show()
+    # If a principal component is passed, plot only a single cross-correlation.
     else:
         fig = plt.figure(dpi=150)
         ax = fig.add_subplot(111)
@@ -89,18 +91,21 @@ def plot_cross_correlation(df, label, dir_path, pc=None):
         ax.set_ylabel(f'{y_label}')
         ax.set_aspect(1.0/ax.get_data_ratio(), adjustable='box')
         # plt.tight_layout()
-        # plt.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
         plt.savefig(dir_path / f'cross-correlation_wghtd-avg_{label}_{pc}.pdf', bbox_inches='tight')
         # plt.show()
 
 
 def load_data(dir_path, df_path, label, pc):
+    # load dataframe, print columns to show names of different descriptors, plot cross-correlation and linear
+    # regression line.
     df = pd.read_pickle(df_path)
     print(df.columns)
     plot_cross_correlation(df, label, dir_path, pc)
 
 
 if __name__ == '__main__':
+    # Handle command line inputs: destination directory for output, PCA data, label of the descriptor,
+    # (principal component).
     parser = argparse.ArgumentParser('Create cross-correlation plots with specified label to identify principal '
                                      'components.')
     parser.add_argument('-dir', '--directory', type=Path, required=True, help='Directory the plot gets saved in.')
@@ -110,7 +115,7 @@ if __name__ == '__main__':
                                                                        'label that will be cross-correlated with the '
                                                                        'PCs.')
     parser.add_argument('-pc', '--principal', type=str, required=False, default=None,
-                        help='Principal component to plot only a single correlation, for e.g. \'PC1\', \'PC2\', '
-                             '\'PC3\', \'...\'. If not given all principal components are plotted in a grid.')
+                        help='OPTIONAL: Principal component to plot only a single correlation, for e.g. \'PC1\', '
+                             '\'PC2\', \'PC3\', \'...\'. If not given all principal components are plotted in a grid.')
     args = parser.parse_args()
     load_data(args.directory, args.dataframe, args.label, args.principal)

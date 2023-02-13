@@ -14,20 +14,19 @@ sns.set(style='white', palette='deep')
 
 
 def get_group(beads, unique):
-    """
-    If any permutation of the bead types in an interaction correspond to one of the unique sets of bead types, return
-    the index of that unique set for grouping.
-    """
+    # If any permutation of the bead types in an interaction correspond to one of the unique sets of bead types
+    # Return:
+    #   idx (int): the index of that unique set for later grouping.
     for idx, unq in enumerate(unique):
         if collections.Counter(beads) == collections.Counter(unq):
             return idx
 
 
 def get_unique(interactions):
-    """
-    Check if any permutation of the bead types in an interaction already exists in some other interaction. Done to
-    group potentially correlated interactions.
-    """
+    # Check if any permutation of the bead types in an interaction already exists in some other interaction. Done to
+    # group potentially correlated interactions.
+    # Return:
+    #   unique (list): all unique permutations of bead types in 2- and 3-body interactions present in the samples.
     unique = list()
     for mbi in interactions:
         if not unique:
@@ -43,24 +42,21 @@ def get_unique(interactions):
 
 
 def get_subgraph_attributes(subgraph, positions, bead_colormap, lipid_color):
-    """
-    Styles node shapes and line colors according to the classification of the bead types as solute,
-    lipid, or solvent.
-    Returns:
-        sub_positions: all node positions of the subgraph
-        sub_colormap: nodes are colored accoridng to the represented bead type
-        edgecolors: the node edges are colored according to the bead type being either lipid, solute or solvent
-        shape: list of shapes, nodes representing lipid bead types are octagonal, circular otherwise.
-    """
+    # Styles node shapes and line colors according to the classification of the bead types as solute,
+    # lipid, or solvent.
+    # Return:
+    #   sub_positions (set): all node positions of the subgraph
+    #   sub_colormap (array): nodes are colored accoridng to the represented bead type
+    #   edgecolors (list): the node edges are colored according to the bead type being either lipid, solute or solvent
+    #   shape (char): list of shapes, nodes representing lipid bead types are octagonal, circular otherwise
     labels = nx.get_node_attributes(subgraph, 'name')
     sub_positions = {node: positions[node] for node in subgraph.nodes()}
     kind = list(nx.get_node_attributes(subgraph, 'kind').values())[0]
     if kind == 'lipid':
-        shape = "8"
-        sub_colormap = np.vectorize(bead_colormap.get)(list(labels.values()))
+        shape = '8'
     else:
         shape = 'o'
-        sub_colormap = np.vectorize(bead_colormap.get)(list(labels.values()))
+    sub_colormap = np.vectorize(bead_colormap.get)(list(labels.values()))
 
     edgecolors = list()
     for idx in subgraph.nodes():
@@ -75,12 +71,10 @@ def get_subgraph_attributes(subgraph, positions, bead_colormap, lipid_color):
 
 
 class GraphBuilder:
-    """
-    Handles generation of Networkx graph objects from the selected interactions. Nodes and edges are styled according
-    to the bead types they represent: Position of the bead type on the hydrophobicity scale, belonging to a solute,
-    lipid, or solvent representation. Edges are colored orange if both nodes represent solute bead types, black
-    otherwise. Edges are dashed if one of the connected nodes represent a solvent or ion molecule.
-    """
+    # Handles generation of Networkx graph objects from the selected interactions. Nodes and edges are styled according
+    # to the bead types they represent: Position of the bead type on the hydrophobicity scale, belonging to a solute,
+    # lipid, or solvent representation. Edges are colored orange if both nodes represent solute bead types, black
+    # otherwise. Edges are dashed if one of the connected nodes represent a solvent or ion molecule.
     def __init__(self):
         self.beads = ['T1', 'T2', 'T3', 'T4', 'T5', 'Q0', 'Qa', 'C1', 'PQd', 'P4', 'POL', 'Nda', 'C3', 'Na']
         self.node_idx = {self.beads[idx]: idx for idx in range(len(self.beads))}
@@ -95,10 +89,15 @@ class GraphBuilder:
                                      'count': 0}))
 
     def build_graph(self, interactions, lipid):
-        """
-        Adds a node for each new bead type encountered in the selected interactions increases node attribute 'weight'
-        otherwise. Increases edge weights if two nodes are already connected, adds a new edge otherwise.
-        """
+        # Adds a node for each new bead type encountered in the selected interactions increases node attribute 'weight'
+        # otherwise. Increases edge weights if two nodes are already connected, adds a new edge otherwise.
+        # Return:
+        #   graph (networkx graph): all bead types found in the selected many-body interactions with their frequency,
+        #                           edges if two bead types are connected in a many-body interaction, edge weights
+        #                           incremented each time a pair of bead types is found to be connected in a many-body
+        #                           interaction.
+        #   lipid_color (str): Color for node borders, used to visually separate the two compared environments.
+        #   lipid_bead (str): Name of the environment for labelling of the plots. Hardcoded for CL/PG!
         graph = nx.Graph()
         if lipid == 'Nda':
             lipid_color = '#a50000'
@@ -126,9 +125,7 @@ class GraphBuilder:
         return graph, lipid_color, lipid_bead
 
     def draw_graph(self, graph, lipid_color, lipid_bead, ax):
-        """
-        Handles visualizing the generated graph objects, setting styles and adding plot labels.
-        """
+        # Handles visualizing the generated graph objects, setting styles and adding plot labels.
         labels = nx.get_node_attributes(graph, 'name')
         node_colors = nx.get_node_attributes(graph, 'color')
         bead_colormap = {labels[bead]: color for bead, color in node_colors.items()}
@@ -187,10 +184,8 @@ class GraphBuilder:
 
 
 def generate_overlap_graph(df, pc, n, directory, sign):
-    """
-    Select the interactions to visualize, generate figure environment, handle graph building, rendering and saving of
-    results.
-    """
+    # Select the interactions to visualize, generate figure environment, handle graph building, rendering and saving of
+    # results.
     if sign == 'positive':
         interaction = df[pc].nlargest(n)
     else:
@@ -214,9 +209,7 @@ def generate_overlap_graph(df, pc, n, directory, sign):
 
 
 def process_data(df_path, pc, sign, number):
-    """
-    Load input data and pass plotting flags to plotting method.
-    """
+    # Load input data and pass plotting flags to plotting method.
     df = pd.read_pickle(df_path)
     # drop one-body interactions in loadings dataframe
     df = df.drop(index=[idx for idx in df.index.tolist() if '-' not in idx])
@@ -233,10 +226,8 @@ def process_data(df_path, pc, sign, number):
 
 
 if __name__ == '__main__':
-    """
-    Handle passing of pandas dataframe with loadings, selecting of the principal component and loading sign, and the 
-    number of loadings to be analyzed.
-    """
+    # Handle passing of pandas dataframe with loadings, selecting of the principal component and loading sign, and the
+    # number of loadings to be analyzed.
     parser = argparse.ArgumentParser('Visualize 3D relations of 2-body and 3-body interactions.')
     parser.add_argument('-df', '--dataframe', type=Path, required=True, help='Path to dataframe with PCA loadings.')
     parser.add_argument('-pc', '--component', type=str, required=True, help='Principal component to plot.')

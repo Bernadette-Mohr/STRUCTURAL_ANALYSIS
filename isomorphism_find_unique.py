@@ -5,24 +5,20 @@ import networkx as nx
 
 
 def clean_graph(graph):
-    """
-    Delete self-loops present in the originally generated graph structures. Self-loops are not valid for molecular
-    representations.
-    Return:
-        graph: Networkx graph object without selfloop edges.
-    """
+    # Delete self-loops present in the originally generated graph structures. Self-loops are not valid for molecular
+    # representations.
+    # Return:
+    #   graph: Networkx graph object without selfloop edges.
     graph.remove_edges_from(nx.selfloop_edges(graph))
     return graph
 
 
 def find_isomorphisms(unique_graphs, graphs):
-    """
-    For all graph structures in a list, check if an isomorph is already in a list of unique graph structures. Increase
-    the frequency counter if found, add new structure otherwise.
-    Return:
-        unique_graphs: list of tuples of all unique graph structures encountered in the samples with their respective
-        frequency.
-    """
+    # For all graph structures in a list, check if an isomorph is already in a list of unique graph structures. Increase
+    # the frequency counter if found, add new structure otherwise.
+    # Return:
+    #   unique_graphs (list): tuples of all unique graph structures encountered in the samples with their respective
+    #                         frequency.
     for graph in graphs:
         graph = clean_graph(graph)
         is_isomer = False
@@ -40,10 +36,8 @@ def find_isomorphisms(unique_graphs, graphs):
 
 
 def process_graphs(dirpath):
-    """
-    For all active learning rounds: Uncompress the list of analyzed solute graphs, check for new graph structures, add
-    to the list of unique graphs if found.
-    """
+    # For all active learning rounds: Uncompress the list of analyzed solute graphs, check for new graph structures, add
+    # to the list of unique graphs if found.
     unique_graphs = list()
     for rnd_graphs in sorted(dirpath.glob('**/**/*.pkl')):  # ROUND_*/graphs/*.pkl
         with open(rnd_graphs, 'rb') as graphs_pkl:
@@ -60,10 +54,8 @@ def process_graphs(dirpath):
 
 
 if __name__ == '__main__':
-    """
-    Pass root directory containing all pickle archives of solute graphs. Solutes are represented as Networkx objects, 
-    stored in a pickled list for each active learning round.
-    """
+    # Pass root directory containing all pickle archives of solute graphs. Solutes are represented as Networkx objects,
+    # stored in a pickled list for each active learning round.
     parser = argparse.ArgumentParser('Find all structures present in graph databases by looking for isomorphisms.')
     parser.add_argument('-dir', '--directory', type=Path, required=True, help='Directory where pickle archives with '
                                                                               'graph objects can be found.')
