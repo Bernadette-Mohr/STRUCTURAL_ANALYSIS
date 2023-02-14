@@ -1,9 +1,10 @@
-# general python modules
+# general functionalities
 import numpy as np
 import pandas as pd
 import regex as re
 import tqdm
-# SLATM tools
+
+# Quantum machine learning: SLATM
 import qml
 
 

@@ -1,18 +1,20 @@
-# general python modules
-import gc
+# general functionalities
 import argparse
-from pathlib import Path
+import gc
 import pickle
-import pandas as pd
-import numpy as np
 import warnings
-from tqdm import tqdm
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
 import regex as re
+from tqdm import tqdm
+
 # MDAnalysis tools, custom modules
-import preprocessing
-import generate_representations
-import clean_trajectories
 import MDAnalysis as mda
+import clean_trajectories
+import generate_representations
+import preprocessing
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 np.warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)

@@ -1,8 +1,12 @@
-import pandas as pd
+# general functionalities
 from pathlib import Path
 import regex as re
-import networkx as nx
+
+import pandas as pd
 import pickle
+
+# Networkx
+import networkx as nx
 
 
 def clean_graph(graph):

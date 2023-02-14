@@ -1,21 +1,24 @@
 # general functionalities
+import argparse
+import pickle
 import warnings
 from collections import defaultdict
-import argparse
 from pathlib import Path
+
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
-import pickle
-from tqdm import tqdm
-# analysis
-from sklearn.decomposition import PCA
-import sklearn
+
 # plotting
-import plotly.express as px
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib import colors
+import plotly.express as px
 import seaborn as sns
+from matplotlib import colors
+
+# analysis
+import sklearn
+from sklearn.decomposition import PCA
 
 print(sklearn.__version__)
 

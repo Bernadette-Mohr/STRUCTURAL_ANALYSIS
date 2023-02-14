@@ -1,18 +1,19 @@
+# general functionalities
 import argparse
+import itertools
 from pathlib import Path
+from string import ascii_lowercase
 
 import numpy as np
 import pandas as pd
-import itertools
 
-from matplotlib.offsetbox import AnnotationBbox
-import matplotlib.pyplot as plt
+# plotting
 import matplotlib as mpl
-from matplotlib import colors
+import matplotlib.pyplot as plt
 import seaborn as sns
 import skunk
-from string import ascii_lowercase
-
+from matplotlib import colors
+from matplotlib.offsetbox import AnnotationBbox
 from plot_cross_correlations import style_label
 
 sns.set(style='whitegrid', palette='deep')
