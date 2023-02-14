@@ -1,7 +1,11 @@
+# general functionalities
 import argparse
 from pathlib import Path
+
 import pandas as pd
 import numpy as np
+
+# plotting, analysis
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 import seaborn as sns

@@ -1,6 +1,10 @@
+# general functionalities
 import argparse
 from pathlib import Path
+
 import numpy as np
+
+# MDAnalysis tools
 import MDAnalysis as mda
 from MDAnalysis import transformations
 from MDAnalysis.analysis.lineardensity import LinearDensity

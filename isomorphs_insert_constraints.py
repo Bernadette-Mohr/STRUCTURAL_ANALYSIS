@@ -1,8 +1,12 @@
+# general functionalities
 import argparse
 from pathlib import Path
+import regex as re
+
 import pandas as pd
 import pickle
-import regex as re
+
+# Networkx
 import networkx as nx
 from networkx.algorithms import isomorphism
 

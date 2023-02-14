@@ -1,6 +1,8 @@
+# general functionalities
 import argparse
 from pathlib import Path
 import pickle
+# Networkx
 import networkx as nx
 
 

@@ -1,14 +1,18 @@
+# general functionalities
 import argparse
-from pathlib import Path
-import numpy as np
-import pandas as pd
 import collections
 from itertools import groupby
-import networkx as nx
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+# plotting
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
+import networkx as nx
 import seaborn as sns
 from matplotlib.lines import Line2D
-import matplotlib.gridspec as gridspec
 
 sns.set(style='white', palette='deep')
 
