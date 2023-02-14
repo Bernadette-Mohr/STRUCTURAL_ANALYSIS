@@ -1,5 +1,5 @@
 # Condensed-phase molecular representation to link structure and thermodynamics in molecular dynamics
-### Code accompanying the publication at ...
+### Code accompanying the publication at <http://example.com>
 
 The scripts were created specifically for this project, with specific expectations for directory paths 
 and some hard-coded filenames and other settings.
