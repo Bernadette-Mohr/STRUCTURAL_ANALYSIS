@@ -239,6 +239,8 @@ def calculate_PCA(slatms, selectivities, test_data=None, n_components=3):
         components = pca.components_
 
         pc_df = pd.DataFrame(X_train)
+        # Euclidean distance/L_2 norm of the difference SLATMs to quantify the difference between interactions in the
+        # different environments.
         pc_df['dist'] = np.linalg.norm(slatms, axis=1)
         pc_df['sol'] = selectivities.agg(lambda x: f"{x['round']} {x['solute']}", axis=1)
         pc_df['selec'] = list(selectivities['DeltaDeltaG'])

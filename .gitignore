@@ -4,7 +4,6 @@
 /carbon_copy_batch.py
 /clean_and_convert
 /debug_position_clashes.py
-/generate_labels.py
 /pca_biplot.py
 /plot_interaction_weights.py
 /pre-minimize.py
