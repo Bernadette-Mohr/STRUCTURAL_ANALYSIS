@@ -44,7 +44,7 @@ The Spectrum of London and Axilrod-Teller-Muto (SLATM) potential was defined by 
 * `plot_cross_correlations.py`
     * Cross-correlates a descriptor to principal components, performs linear regression.
 * `correlate_loadings_interactions.py`
-    * Visualizes the most relevant interactions selected by their loading values (eigenvecor * sqrt(eigenvalue)) 
+    * Visualizes the most relevant interactions selected by their loading values (`eigenvecor * sqrt(eigenvalue)`) 
     to provide an idea about 3D structural aspects.
 * `biplot_scores_weights.py`
     * Plots most pairs of principal components and their most relevant eigenvector coefficients. Colored by a 
