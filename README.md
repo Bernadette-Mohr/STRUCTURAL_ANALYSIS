@@ -18,6 +18,7 @@ and some hard-coded filenames and other settings.
     the settings for angles and constraints.
 
 ## Generating the SLATM representations:
+The Spectrum of London and Axilrod-Teller-Muto (SLATM) potential was defined by Huang, Symonds and von Lilienfeld, <https://arxiv.org/abs/1807.04259>.
 * `analyze_structures.py`
     * Handles loading of trajectory files and the required steps to translate the coarse-grained MD trajectories 
     into SLATM representations.
