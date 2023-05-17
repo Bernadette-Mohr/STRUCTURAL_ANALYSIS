@@ -37,6 +37,8 @@ The Spectrum of London and Axilrod-Teller-Muto (SLATM) potential was defined by 
 ## Analyzing a set of SLATM representations with PCA:
 * `analyze_SLATMs.py`
     * Loads the SLATM representations and required additional files, 
+    * Handles preprocessing of SLATM representations including normalization for PCA
+    * PCA embedding of the SLATM representations
 
 ## Visualizing the PCA results:
 * `generate_labels.py`
