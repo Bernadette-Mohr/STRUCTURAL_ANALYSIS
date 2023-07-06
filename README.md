@@ -1,5 +1,5 @@
 # Condensed-phase molecular representation to link structure and thermodynamics in molecular dynamics
-### Code accompanying the publication at <http://insert_doi_link.com>
+### Code accompanying the publication at <https://doi.org/10.1021/acs.jctc.3c00201>
 
 The scripts were created specifically for this project, with specific expectations for directory paths 
 and some hard-coded filenames and other settings.
